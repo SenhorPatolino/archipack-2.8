@@ -32,105 +32,29 @@ from mathutils import Vector, Matrix
 from mathutils.geometry import (
     intersect_line_plane
     )
-from bpy_extras import view3d_utils
-import logging
-logger = logging.getLogger("archipack")
+from bpy_extras.view3d_utils import (
+    region_2d_to_origin_3d,
+    region_2d_to_vector_3d
+    )
 
 
-class ArchipackObjectsManager():
-    """
-      Provide objects and datablock utility
-      Support meshes curves and lamps
-      - recursive delete objects and datablocks
-      - recursive clone linked
-      - recursive copy
-    """
-    def _cleanup_datablock(self, d, typ):
-        if d and d.users < 1:
-            if typ == 'MESH':
-                bpy.data.meshes.remove(d)
-            elif typ == 'CURVE':
-                bpy.data.curves.remove(d)
-            elif typ == 'LAMP':
-                bpy.data.lamps.remove(d)
+class ArchipackCollectionManager():
 
-    def _delete_object(self, context, o):
-        d = o.data
-        typ = o.type
-        context.scene.objects.unlink(o)
-        bpy.data.objects.remove(o)
-        self._cleanup_datablock(d, typ)
+    @staticmethod
+    def link_object_to_scene(context, o):
+        coll_main = context.scene.collection.children.get("Archipack")
+        if coll_main is None:
+            coll_main = bpy.data.collections.new(name="Archipack")
+            context.scene.collection.children.link(coll_main)
+        coll_main.objects.link(o)
 
-    def _delete_childs(self, context, o):
-        for child in o.children:
-            self._delete_childs(context, child)
-        self._delete_object(context, o)
-
-    def delete_object(self, context, o):
-        """
-          Recursively delete object and childs
-          Cleanup datablock when needed
-          @o: object to delete
-        """
-        if o is not None:
-            self._delete_childs(context, o)
-
-    def _duplicate_object(self, context, o, linked):
-        new_o = o.copy()
-        if o.data:
-            if linked:
-                new_o.data = o.data
-            else:
-                new_o.data = o.data.copy()
-        context.scene.objects.link(new_o)
-        return new_o
-
-    def _duplicate_childs(self, context, o, linked):
-        p = self._duplicate_object(context, o, linked)
-        for child in o.children:
-            c = self._duplicate_childs(context, child, linked)
-            c.parent = p
-            # c.location = child.location.copy()
-            c.matrix_local = child.matrix_local.copy()
-            c.matrix_parent_inverse = child.matrix_parent_inverse.copy()
-        return p
-
-    def duplicate_object(self, context, o, linked):
-        """
-          Recursively duplicate object and childs
-          @o: object to duplicate
-          @linked : boolean linked duplicate
-          return parent on success
-        """
-        if o is not None:
-            return self._duplicate_childs(context, o, linked)
-        return None
-
-    def _link_object(self, src, o):
-        if src.data:
-            d = o.data
-            typ = o.type
-            o.data = src.data
-            self._cleanup_datablock(d, typ)
-
-    def _link_child(self, src, o):
-        self._link_object(src, o)
-        if len(src.children) == len(o.children):
-            for i, child in enumerate(src.children):
-                self._link_child(child, o.children[i])
-
-    def link_object(self, src, o):
-        """
-         Recursievely link datablock
-         @src: object source
-         @o: object destination
-         src and o parent child relationship must match
-        """
-        if src is not None:
-            self._link_child(src, o)
+    @staticmethod
+    def unlink_object_from_scene(o):
+        for coll in o.users_collection:
+            coll.objects.unlink(o)
 
 
-class ArchipackObject(ArchipackObjectsManager):
+class ArchipackObject(ArchipackCollectionManager):
     """
         Shared property of archipack's objects PropertyGroup
         provide basic support for copy to selected
@@ -149,22 +73,16 @@ class ArchipackObject(ArchipackObjectsManager):
             Filter object with this class in data
             return
             True when object contains this datablock
-            False otherwhise
+            False otherwise
             usage:
             class_name.filter(object) from outside world
             self.__class__.filter(object) from instance
         """
-        res = False
         try:
-            res = cls.__name__ in o.data
+            return cls.__name__ in o.data
         except:
             pass
-        if not res:
-            try:
-                res = cls.__name__ in o
-            except:
-                pass
-        return res
+        return False
 
     @classmethod
     def datablock(cls, o):
@@ -177,18 +95,11 @@ class ArchipackObject(ArchipackObjectsManager):
                 class_name.datablock(object) from outside world
                 self.__class__.datablock(object) from instance
         """
-        d = None
         try:
-            d = getattr(o.data, cls.__name__)[0]
+            return getattr(o.data, cls.__name__)[0]
         except:
             pass
-
-        if d is None:
-            try:
-                d = getattr(o, cls.__name__)[0]
-            except:
-                pass
-        return d
+        return None
 
     def find_in_selection(self, context, auto_update=True):
         """
@@ -205,6 +116,7 @@ class ArchipackObject(ArchipackObjectsManager):
         selected = context.selected_objects[:]
 
         for o in selected:
+
             if self.__class__.datablock(o) == self:
                 self.previously_selected = selected
                 self.previously_active = active
@@ -213,34 +125,46 @@ class ArchipackObject(ArchipackObjectsManager):
         return None
 
     def restore_context(self, context):
-        """
-         restore context
-        """
+        # restore context
         bpy.ops.object.select_all(action="DESELECT")
 
         try:
             for o in self.previously_selected:
-                o.select = True
+                o.select_set(state=True)
         except:
             pass
         if self.previously_active is not None:
-            self.previously_active.select = True
-            context.scene.objects.active = self.previously_active
+            self.previously_active.select_set(state=True)
+            context.view_layer.objects.active = self.previously_active
         self.previously_selected = None
         self.previously_active = None
 
+    def move_object(self, o, p):
+        """
+         When firstpoint is moving we must move object according
+         p is new x, y location in world coordsys
+        """
+        p = Vector((p.x, p.y, o.matrix_world.translation.z))
+        # p is in o coordsys
+        if o.parent:
+            o.location = p @ o.parent.matrix_world.inverted()
+            o.matrix_world.translation = p
+        else:
+            o.location = p
+            o.matrix_world.translation = p
 
-class ArchipackCreateTool(ArchipackObjectsManager):
+
+class ArchipackCreateTool(ArchipackCollectionManager):
     """
         Shared property of archipack's create tool Operator
     """
-    auto_manipulate = BoolProperty(
+    auto_manipulate : BoolProperty(
             name="Auto manipulate",
             description="Enable object's manipulators after create",
             options={'SKIP_SAVE'},
             default=True
             )
-    filepath = StringProperty(
+    filepath : StringProperty(
             options={'SKIP_SAVE'},
             name="Preset",
             description="Full filename of python preset to load at create time",
@@ -271,21 +195,19 @@ class ArchipackCreateTool(ArchipackObjectsManager):
             if fallback:
                 # fallback to load preset on background process
                 try:
-                    f = open(self.filepath)
-                    exec(compile(f.read(), self.filepath, 'exec'))
+                    with open(self.filepath) as f:
+                        lines = f.read()
+                        cmp = compile(lines, self.filepath, 'exec')
+                        exec(cmp)
                 except:
                     print("Archipack unable to load preset file : %s" % (self.filepath))
                     pass
-                finally:
-                    f.close()
         d.auto_update = True
 
     def add_material(self, o, material='DEFAULT', category=None):
-        # skip if preset allready add material
+        # skip if preset already add material
         if "archipack_material" in o:
             return
-        # enable viewport transparency
-        o.show_transparent = True
         try:
             if category is None:
                 category = self.archipack_category
@@ -298,69 +220,48 @@ class ArchipackCreateTool(ArchipackObjectsManager):
     def manipulate(self):
         if self.auto_manipulate:
             try:
-                if bpy.ops.archipack.manipulate.poll():
-                    bpy.ops.archipack.manipulate('INVOKE_DEFAULT')
+                op = getattr(bpy.ops.archipack, self.archipack_category + "_manipulate")
+                if op.poll():
+                    op('INVOKE_DEFAULT')
             except:
                 print("Archipack bpy.ops.archipack.%s_manipulate not found" % (self.archipack_category))
                 pass
 
 
-class ArchipackDrawTool(ArchipackObjectsManager):
+class ArchipackDrawTool(ArchipackCollectionManager):
     """
         Draw tools
     """
-    def region_2d_to_orig_and_vect(self, context, event):
-
-        region = context.region
-        rv3d = context.region_data
-        coord = (event.mouse_region_x, event.mouse_region_y)
-
-        vec = view3d_utils.region_2d_to_vector_3d(region, rv3d, coord)
-        orig = view3d_utils.region_2d_to_origin_3d(region, rv3d, coord)
-
-        return rv3d.is_perspective, orig, vec
-
     def mouse_to_plane(self, context, event, origin=Vector((0, 0, 0)), normal=Vector((0, 0, 1))):
         """
             convert mouse pos to 3d point over plane defined by origin and normal
-            return None if the point is behind camera view
         """
-        is_perspective, orig, vec = self.region_2d_to_orig_and_vect(context, event)
-        pt = intersect_line_plane(orig, orig + vec, origin, normal, False)
-
+        region = context.region
+        rv3d = context.region_data
+        co2d = (event.mouse_region_x, event.mouse_region_y)
+        view_vector_mouse = region_2d_to_vector_3d(region, rv3d, co2d)
+        ray_origin_mouse = region_2d_to_origin_3d(region, rv3d, co2d)
+        pt = intersect_line_plane(ray_origin_mouse, ray_origin_mouse + view_vector_mouse,
+           origin, normal, False)
         # fix issue with parallel plane
         if pt is None:
-            pt = intersect_line_plane(orig, orig + vec, origin, vec, False)
-
-        if pt is None:
-            return None
-
-        if is_perspective:
-            # Check if point is behind point of view (mouse over horizon)
-            y = Vector((0, 0, 1))
-            x = vec.cross(y)
-            x = y.cross(vec)
-            itM = Matrix([
-                [x.x, y.x, vec.x, orig.x],
-                [x.y, y.y, vec.y, orig.y],
-                [x.z, y.z, vec.z, orig.z],
-                [0, 0, 0, 1]
-                ]).inverted()
-            res = itM * pt
-
-            if res.z < 0:
-                return None
-
+            pt = intersect_line_plane(ray_origin_mouse, ray_origin_mouse + view_vector_mouse,
+                origin, view_vector_mouse, False)
         return pt
 
     def mouse_to_scene_raycast(self, context, event):
         """
             convert mouse pos to 3d point over plane defined by origin and normal
         """
-        is_perspective, orig, vec = self.region_2d_to_orig_and_vect(context, event)
+        region = context.region
+        rv3d = context.region_data
+        co2d = (event.mouse_region_x, event.mouse_region_y)
+        view_vector_mouse = region_2d_to_vector_3d(region, rv3d, co2d)
+        ray_origin_mouse = region_2d_to_origin_3d(region, rv3d, co2d)
         res, pos, normal, face_index, object, matrix_world = context.scene.ray_cast(
-            orig,
-            vec)
+            depsgraph=context.view_layer.depsgraph,
+            origin=ray_origin_mouse,
+            direction=view_vector_mouse)
         return res, pos, normal, face_index, object, matrix_world
 
     def mouse_hover_wall(self, context, event):
@@ -368,43 +269,16 @@ class ArchipackDrawTool(ArchipackObjectsManager):
             convert mouse pos to matrix at bottom of surrounded wall, y oriented outside wall
         """
         res, pt, y, i, o, tM = self.mouse_to_scene_raycast(context, event)
-        if res and o.data is not None:
-
+        if res and o.data is not None and 'archipack_wall2' in o.data:
             z = Vector((0, 0, 1))
+            d = o.data.archipack_wall2[0]
             y = -y
+            pt += (0.5 * d.width) * y.normalized()
             x = y.cross(z)
-
-            if 'archipack_wall2' in o.data:
-                d = o.data.archipack_wall2[0]
-                pt += (0.5 * d.width) * y.normalized()
-                return True, Matrix([
-                    [x.x, y.x, z.x, pt.x],
-                    [x.y, y.y, z.y, pt.y],
-                    [x.z, y.z, z.z, o.matrix_world.translation.z],
-                    [0, 0, 0, 1]
-                    ]), o, d.width, y, d.z_offset
-
-            elif 'archipack_wall' in o.data:
-                # one point on the oposite to raycast side (1 unit inside)
-                # @TODO: estimate the needed width - increase and re-cast when nothing is found
-                #        within a limit of n iterations so single sided walls wont make it fail
-                #        - ensure the ray hit same object ?
-
-                p0 = pt + y.normalized()
-                # direction
-                dp = -y.normalized()
-                # cast another ray to find wall depth
-                res, pos, normal, face_index, object, matrix_world = context.scene.ray_cast(
-                    p0,
-                    dp)
-                if res:
-                    width = (pt - pos).to_2d().length
-                    print("hit:%s  w:%s  pt:%s pos:%s" % (object.name, width, pt, pos))
-                    p1 = pt + (0.5 * width) * y.normalized()
-                    return True, Matrix([
-                        [x.x, y.x, z.x, p1.x],
-                        [x.y, y.y, z.y, p1.y],
-                        [x.z, y.z, z.z, o.matrix_world.translation.z],
-                        [0, 0, 0, 1]
-                        ]), o, width, y, 0
+            return True, Matrix([
+                [x.x, y.x, z.x, pt.x],
+                [x.y, y.y, z.y, pt.y],
+                [x.z, y.z, z.z, o.matrix_world.translation.z],
+                [0, 0, 0, 1]
+                ]), o, d.width, y, 0  # d.z_offset
         return False, Matrix(), None, 0, Vector(), 0

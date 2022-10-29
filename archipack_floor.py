@@ -45,8 +45,6 @@ from .archipack_cutter import (
     ArchipackCutter,
     ArchipackCutterPart
     )
-from .archipack_dimension import DimensionProvider
-from .archipack_curveman import ArchipackUserDefinedPath
 
 
 # ------------------------------------------------------------------
@@ -96,14 +94,12 @@ class CurvedFloor(Floor, Arc):
 
 class FloorGenerator(CutAblePolygon, CutAbleGenerator):
 
-    def __init__(self, d):
-        self.d = d
-        self.parts = d.parts
+    def __init__(self, parts):
+        self.parts = parts
         self.segs = []
         self.holes = []
         self.convex = True
         self.xsize = 0
-        self.tM = Matrix()
 
     def add_part(self, part):
 
@@ -129,45 +125,46 @@ class FloorGenerator(CutAblePolygon, CutAbleGenerator):
         self.segs.append(s)
         self.last_type = part.type
 
-    def set_offset(self, offset):
+    def set_offset(self):
         last = None
         for i, seg in enumerate(self.segs):
-            seg.set_offset(offset + self.parts[i].offset, last)
+            seg.set_offset(self.parts[i].offset, last)
             last = seg.line
 
-    def close(self, offset):
+    def close(self, closed):
         # Make last segment implicit closing one
-        part = self.parts[-1]
-        w = self.segs[-1]
-        dp = self.segs[0].p0 - self.segs[-1].p0
-        if "C_" in part.type:
-            dw = (w.p1 - w.p0)
-            w.r = part.radius / dw.length * dp.length
-            # angle pt - p0        - angle p0 p1
-            da = atan2(dp.y, dp.x) - atan2(dw.y, dw.x)
-            a0 = w.a0 + da
-            if a0 > pi:
-                a0 -= 2 * pi
-            if a0 < -pi:
-                a0 += 2 * pi
-            w.a0 = a0
-        else:
-            w.v = dp
+        if closed:
+            part = self.parts[-1]
+            w = self.segs[-1]
+            dp = self.segs[0].p0 - self.segs[-1].p0
+            if "C_" in part.type:
+                dw = (w.p1 - w.p0)
+                w.r = part.radius / dw.length * dp.length
+                # angle pt - p0        - angle p0 p1
+                da = atan2(dp.y, dp.x) - atan2(dw.y, dw.x)
+                a0 = w.a0 + da
+                if a0 > pi:
+                    a0 -= 2 * pi
+                if a0 < -pi:
+                    a0 += 2 * pi
+                w.a0 = a0
+            else:
+                w.v = dp
 
-        if len(self.segs) > 1:
-            w.line = w.make_offset(offset + self.parts[-1].offset, self.segs[-2].line)
+            if len(self.segs) > 1:
+                w.line = w.make_offset(self.parts[-1].offset, self.segs[-2].line)
 
-        p1 = self.segs[0].line.p1
-        self.segs[0].line = self.segs[0].make_offset(offset + self.parts[0].offset, w.line)
-        self.segs[0].line.p1 = p1
+            p1 = self.segs[0].line.p1
+            self.segs[0].line = self.segs[0].make_offset(self.parts[0].offset, w.line)
+            self.segs[0].line.p1 = p1
 
     def locate_manipulators(self):
         """
             setup manipulators
         """
         for i, f in enumerate(self.segs):
-            part = self.parts[i]
-            manipulators = part.manipulators
+
+            manipulators = self.parts[i].manipulators
             p0 = f.p0.to_3d()
             p1 = f.p1.to_3d()
             # angle from last to current segment
@@ -194,11 +191,21 @@ class FloorGenerator(CutAblePolygon, CutAbleGenerator):
             manipulators[2].set_pts([p0, p1, (1, 0, 0)])
             # dumb segment id
             manipulators[3].set_pts([p0, p1, (1, 0, 0)])
-            
-            self.d.add_dimension_point(part.uid, p0)
-            
+
     def get_verts(self, verts):
-        verts.extend([s.p0.to_3d() for s in self.segs])
+        for s in self.segs:
+            if "Curved" in type(s).__name__:
+                for i in range(16):
+                    # x, y = floor.line.lerp(i / 16)
+                    verts.append(s.lerp(i / 16).to_3d())
+            else:
+                # x, y = s.line.p0
+                verts.append(s.p0.to_3d())
+            """
+            for i in range(33):
+                x, y = floor.line.lerp(i / 32)
+                verts.append((x, y, 0))
+            """
 
     def rotate(self, idx_from, a):
         """
@@ -218,7 +225,7 @@ class FloorGenerator(CutAblePolygon, CutAbleGenerator):
             # rotate seg
             seg.rotate(a)
             # rotate delta from rotation center to segment start
-            dp = rM * (seg.p0 - p0)
+            dp = rM @ (seg.p0 - p0)
             seg.translate(dp)
 
     def translate(self, idx_from, dp):
@@ -237,17 +244,15 @@ class FloorGenerator(CutAblePolygon, CutAbleGenerator):
             seg.draw(context, render=False)
 
     def limits(self):
-        itM = self.tM.inverted()
-        pts = [itM * s.p0.to_3d() for s in self.segs]
-        x_size = [p.x for p in pts]
-        y_size = [p.y for p in pts]
+        x_size = [s.p0.x for s in self.segs]
+        y_size = [s.p0.y for s in self.segs]
         for s in self.segs:
             if "Curved" in type(s).__name__:
-                c = itM * s.c.to_3d()
-                x_size.append(c.x + s.r)
-                x_size.append(c.x - s.r)
-                y_size.append(c.y + s.r)
-                y_size.append(c.y - s.r)
+                x_size.append(s.c.x + s.r)
+                x_size.append(s.c.x - s.r)
+                y_size.append(s.c.y + s.r)
+                y_size.append(s.c.y - s.r)
+
         self.xmin = min(x_size)
         self.xmax = max(x_size)
         self.xsize = self.xmax - self.xmin
@@ -255,21 +260,12 @@ class FloorGenerator(CutAblePolygon, CutAbleGenerator):
         self.ymax = max(y_size)
         self.ysize = self.ymax - self.ymin
 
-    def cut(self, context, o, d):
+    def cut(self, context, o):
         """
             either external or holes cuts
         """
-        a = d.rotation
-        ca = cos(a)
-        sa = sin(a)
-        self.tM = Matrix([
-            [ca, -sa, 0, 0],
-            [sa, ca, 0, 0],
-            [0, 0, 1, 0],
-            [0, 0, 0, 1]
-            ])
-        self.as_lines()
         self.limits()
+        self.as_lines()
         self.is_convex()
         for b in o.children:
             d = archipack_floor_cutter.datablock(b)
@@ -309,7 +305,7 @@ class FloorGenerator(CutAblePolygon, CutAbleGenerator):
                     use_dissolve_boundaries=False,
                     verts=bm.verts,
                     edges=bm.edges,
-                    delimit=1)
+                    delimit={'MATERIAL'})
 
         bm.verts.ensure_lookup_table()
 
@@ -321,6 +317,8 @@ class FloorGenerator(CutAblePolygon, CutAbleGenerator):
             bmesh.ops.solidify(bm, geom=geom, thickness=0.0001)
             for v in verts:
                 v.co.z = bottom
+
+            bm.normal_update()
 
             # bevel
             if d.bevel:
@@ -337,10 +335,10 @@ class FloorGenerator(CutAblePolygon, CutAbleGenerator):
                 bmesh.ops.bevel(bm,
                     geom=geom,
                     offset=d.bevel_amount,
-                    offset_type=0,
+                    offset_type='OFFSET',
                     segments=1,     # d.bevel_res
                     profile=0.5,
-                    vertex_only=False,
+                    # vertex_only=False,
                     clamp_overlap=False,
                     material=-1)
 
@@ -370,7 +368,7 @@ class FloorGenerator(CutAblePolygon, CutAbleGenerator):
                         use_dissolve_boundaries=False,
                         verts=bm.verts,
                         edges=bm.edges,
-                        delimit=1)
+                        delimit={'MATERIAL'})
 
             bm.verts.ensure_lookup_table()
 
@@ -558,7 +556,7 @@ class FloorGenerator(CutAblePolygon, CutAbleGenerator):
                     z = self.top
 
                 for pt in base_points:
-                    verts.append(self.tM * Vector((dia * pt[0] + x, dia * pt[1] + y, z)))
+                    verts.append((dia * pt[0] + x, dia * pt[1] + y, z))
 
                 faces.append([f] + [i for i in range(f + 1, len(verts))])
                 uvs.append(base_points)
@@ -679,7 +677,7 @@ class FloorGenerator(CutAblePolygon, CutAbleGenerator):
 
             start_orient_length = not start_orient_length
             x += bl + d.spacing
-            
+
     def herringbone(self, d, verts, faces, matids, uvs):
         """
         Boards are at 45 degree angle, in chevron pattern, ends are angled
@@ -784,7 +782,7 @@ class FloorGenerator(CutAblePolygon, CutAbleGenerator):
             z = self.top
 
         p = len(verts)
-        verts.extend([self.tM * Vector(p) for p in [(x, y, z), (x1, y, z), (x1, y1, z), (x, y1, z)]])
+        verts.extend([(x, y, z), (x1, y, z), (x1, y1, z), (x, y1, z)])
         faces.append([p + 3, p + 2, p + 1, p])
         if rotate_uv:
             uvs.append([(0, 0), (0, 1), (1, 1), (1, 0)])
@@ -808,7 +806,7 @@ class FloorGenerator(CutAblePolygon, CutAbleGenerator):
             z = self.top
 
         p = len(verts)
-        verts.extend([self.tM * Vector((v[0], v[1], z)) for v in [p0, p1, p2, p3]])
+        verts.extend([(v[0], v[1], z) for v in [p0, p1, p2, p3]])
         faces.append([p + 3, p + 2, p + 1, p])
         uvs.append([(0, 0), (1, 0), (1, 1), (0, 1)])
         self.add_matid(d, matids)
@@ -929,7 +927,7 @@ class archipack_floor_part(PropertyGroup):
         A single manipulable polyline like segment
         polyline like segment line or arc based
     """
-    type = EnumProperty(
+    type : EnumProperty(
             items=(
                 ('S_SEG', 'Straight', '', 0),
                 ('C_SEG', 'Curved', '', 1),
@@ -937,19 +935,19 @@ class archipack_floor_part(PropertyGroup):
             default='S_SEG',
             update=update_type
             )
-    length = FloatProperty(
+    length : FloatProperty(
             name="Length",
-            min=0.001,
+            min=0.01,
             default=2.0,
             update=update
             )
-    radius = FloatProperty(
+    radius : FloatProperty(
             name="Radius",
             min=0.5,
             default=0.7,
             update=update
             )
-    da = FloatProperty(
+    da : FloatProperty(
             name="Angle",
             min=-pi,
             max=pi,
@@ -957,7 +955,7 @@ class archipack_floor_part(PropertyGroup):
             subtype='ANGLE', unit='ROTATION',
             update=update
             )
-    a0 = FloatProperty(
+    a0 : FloatProperty(
             name="Start angle",
             min=-2 * pi,
             max=2 * pi,
@@ -965,23 +963,21 @@ class archipack_floor_part(PropertyGroup):
             subtype='ANGLE', unit='ROTATION',
             update=update
             )
-    offset = FloatProperty(
+    offset : FloatProperty(
             name="Offset",
             description="Side offset of segment",
             default=0,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    # DimensionProvider
-    uid = IntProperty(default=0)
-    manipulators = CollectionProperty(type=archipack_manipulator)
+    manipulators : CollectionProperty(type=archipack_manipulator)
 
     def find_in_selection(self, context):
         """
             find witch selected object this instance belongs to
             provide support for "copy to selected"
         """
-        selected = [o for o in context.selected_objects]
+        selected = context.selected_objects[:]
         for o in selected:
             props = archipack_floor.datablock(o)
             if props:
@@ -1007,21 +1003,36 @@ class archipack_floor_part(PropertyGroup):
         box.prop(self, "a0")
 
 
-class archipack_floor(ArchipackObject, ArchipackUserDefinedPath, Manipulable, DimensionProvider, PropertyGroup):
-    n_parts = IntProperty(
+class archipack_floor(ArchipackObject, Manipulable, PropertyGroup):
+    n_parts : IntProperty(
             name="Parts",
             min=1,
             default=1, update=update_manipulators
             )
-    parts = CollectionProperty(type=archipack_floor_part)
-    
+    parts : CollectionProperty(type=archipack_floor_part)
+    user_defined_path : StringProperty(
+            name="User defined",
+            update=update_path
+            )
+    user_defined_resolution : IntProperty(
+            name="Resolution",
+            min=1,
+            max=128,
+            default=12, update=update_path
+            )
+    closed : BoolProperty(
+            default=True,
+            name="Close",
+            options={'SKIP_SAVE'},
+            update=update_manipulators
+            )
     # UI layout related
-    parts_expand = BoolProperty(
+    parts_expand : BoolProperty(
             options={'SKIP_SAVE'},
             default=False
             )
 
-    pattern = EnumProperty(
+    pattern : EnumProperty(
             name='Floor Pattern',
             items=(("boards", "Boards", ""),
                     ("square_parquet", "Square Parquet", ""),
@@ -1035,14 +1046,7 @@ class archipack_floor(ArchipackObject, ArchipackUserDefinedPath, Manipulable, Di
             default="boards",
             update=update
             )
-    rotation = FloatProperty(
-            name='Rotation',
-            subtype='ANGLE', unit='ROTATION',
-            min=-pi,
-            max=pi,
-            update=update
-            )
-    spacing = FloatProperty(
+    spacing : FloatProperty(
             name='Spacing',
             description='The amount of space between boards or tiles in both directions',
             unit='LENGTH', subtype='DISTANCE',
@@ -1051,7 +1055,7 @@ class archipack_floor(ArchipackObject, ArchipackUserDefinedPath, Manipulable, Di
             precision=2,
             update=update
             )
-    thickness = FloatProperty(
+    thickness : FloatProperty(
             name='Thickness',
             description='Thickness',
             unit='LENGTH', subtype='DISTANCE',
@@ -1060,13 +1064,13 @@ class archipack_floor(ArchipackObject, ArchipackUserDefinedPath, Manipulable, Di
             precision=2,
             update=update
             )
-    vary_thickness = BoolProperty(
+    vary_thickness : BoolProperty(
             name='Random Thickness',
             description='Vary thickness',
             default=False,
             update=update
             )
-    thickness_variance = FloatProperty(
+    thickness_variance : FloatProperty(
             name='Variance',
             description='How much vary by',
             min=0, max=100,
@@ -1076,7 +1080,7 @@ class archipack_floor(ArchipackObject, ArchipackUserDefinedPath, Manipulable, Di
             update=update
             )
 
-    board_width = FloatProperty(
+    board_width : FloatProperty(
             name='Width',
             description='The width',
             unit='LENGTH', subtype='DISTANCE',
@@ -1085,13 +1089,13 @@ class archipack_floor(ArchipackObject, ArchipackUserDefinedPath, Manipulable, Di
             precision=2,
             update=update
             )
-    vary_width = BoolProperty(
+    vary_width : BoolProperty(
             name='Random Width',
             description='Vary width',
             default=False,
             update=update
             )
-    width_variance = FloatProperty(
+    width_variance : FloatProperty(
             name='Variance',
             description='How much vary by',
             subtype='PERCENTAGE',
@@ -1099,7 +1103,7 @@ class archipack_floor(ArchipackObject, ArchipackUserDefinedPath, Manipulable, Di
             precision=2,
             update=update
             )
-    width_spacing = FloatProperty(
+    width_spacing : FloatProperty(
             name='Width Spacing',
             description='The amount of space between boards in the width direction',
             unit='LENGTH', subtype='DISTANCE',
@@ -1109,7 +1113,7 @@ class archipack_floor(ArchipackObject, ArchipackUserDefinedPath, Manipulable, Di
             update=update
             )
 
-    board_length = FloatProperty(
+    board_length : FloatProperty(
             name='Length',
             description='The length of the boards',
             unit='LENGTH', subtype='DISTANCE',
@@ -1118,7 +1122,7 @@ class archipack_floor(ArchipackObject, ArchipackUserDefinedPath, Manipulable, Di
             default=2,
             update=update
             )
-    short_board_length = FloatProperty(
+    short_board_length : FloatProperty(
             name='Length',
             description='The length of the boards',
             unit='LENGTH', subtype='DISTANCE',
@@ -1127,27 +1131,27 @@ class archipack_floor(ArchipackObject, ArchipackUserDefinedPath, Manipulable, Di
             default=2,
             update=update
             )
-    vary_length = BoolProperty(
+    vary_length : BoolProperty(
             name='Random Length',
             description='Vary board length',
             default=False,
             update=update
             )
-    length_variance = FloatProperty(
+    length_variance : FloatProperty(
             name='Variance',
             description='How much board length can vary by',
             subtype='PERCENTAGE',
             min=1, max=100, default=50,
             precision=2, update=update
             )
-    max_boards = IntProperty(
+    max_boards : IntProperty(
             name='Max Boards',
             description='Max number of boards in one row',
             min=1,
             default=20,
             update=update
             )
-    length_spacing = FloatProperty(
+    length_spacing : FloatProperty(
             name='Length Spacing',
             description='The amount of space between boards in the length direction',
             unit='LENGTH', subtype='DISTANCE',
@@ -1158,7 +1162,7 @@ class archipack_floor(ArchipackObject, ArchipackUserDefinedPath, Manipulable, Di
             )
 
     # parquet specific
-    boards_in_group = IntProperty(
+    boards_in_group : IntProperty(
             name='Boards in Group',
             description='Number of boards in a group',
             min=1, default=4,
@@ -1166,7 +1170,7 @@ class archipack_floor(ArchipackObject, ArchipackUserDefinedPath, Manipulable, Di
             )
 
     # tile specific
-    tile_width = FloatProperty(
+    tile_width : FloatProperty(
             name='Width',
             description='Width of the tiles',
             unit='LENGTH', subtype='DISTANCE',
@@ -1175,7 +1179,7 @@ class archipack_floor(ArchipackObject, ArchipackUserDefinedPath, Manipulable, Di
             precision=2,
             update=update
             )
-    tile_length = FloatProperty(
+    tile_length : FloatProperty(
             name='Length',
             description='Length of the tiles',
             unit='LENGTH', subtype='DISTANCE',
@@ -1186,13 +1190,13 @@ class archipack_floor(ArchipackObject, ArchipackUserDefinedPath, Manipulable, Di
             )
 
     # grout
-    add_grout = BoolProperty(
+    add_grout : BoolProperty(
             name='Add Grout',
             description='Add grout',
             default=False,
             update=update
             )
-    mortar_depth = FloatProperty(
+    mortar_depth : FloatProperty(
             name='Depth',
             description='The depth of the mortar from the surface of the tile',
             unit='LENGTH', subtype='DISTANCE',
@@ -1204,19 +1208,19 @@ class archipack_floor(ArchipackObject, ArchipackUserDefinedPath, Manipulable, Di
             )
 
     # regular tile
-    random_offset = BoolProperty(
+    random_offset : BoolProperty(
             name='Random Offset',
             description='Random amount of offset for each row of tiles',
             update=update, default=False
             )
-    offset = FloatProperty(
+    offset : FloatProperty(
             name='Offset',
             description='How much to offset each row of tiles',
             min=0, max=100, default=0,
             precision=2,
             update=update
             )
-    offset_variance = FloatProperty(
+    offset_variance : FloatProperty(
             name='Variance',
             description='How much to vary the offset each row of tiles',
             min=0.001, max=100, default=50,
@@ -1225,13 +1229,13 @@ class archipack_floor(ArchipackObject, ArchipackUserDefinedPath, Manipulable, Di
             )
 
     # bevel
-    bevel = BoolProperty(
+    bevel : BoolProperty(
             name='Bevel',
             update=update,
             default=False,
             description='Bevel upper faces'
             )
-    bevel_amount = FloatProperty(
+    bevel_amount : FloatProperty(
             name='Bevel',
             description='Bevel amount',
             unit='LENGTH', subtype='DISTANCE',
@@ -1239,60 +1243,45 @@ class archipack_floor(ArchipackObject, ArchipackUserDefinedPath, Manipulable, Di
             precision=2, step=0.05,
             update=update
             )
-    solidify = BoolProperty(
+    solidify : BoolProperty(
             name="Solidify",
             default=True,
             update=update
             )
-    vary_materials = BoolProperty(
+    vary_materials : BoolProperty(
             name="Random Material",
             default=True,
             description="Vary Material indexes",
             update=update)
-    matid = IntProperty(
+    matid : IntProperty(
             name="#variations",
             min=1,
             max=10,
             default=7,
             description="Material index maxi",
             update=update)
-    auto_update = BoolProperty(
+    auto_update : BoolProperty(
             options={'SKIP_SAVE'},
             default=True,
             update=update_manipulators
             )
-    z = FloatProperty(
+    z : FloatProperty(
             name="dumb z",
             description="Dumb z for manipulator placeholder",
             default=0.01,
             options={'SKIP_SAVE'}
             )
-    x_offset = FloatProperty(
-            name='Offset',
-            description='How much to offset boundary',
-            default=0,
-            precision=2,
-            update=update
-            )
-    closed = BoolProperty(
-            default=True,
-            options={'SKIP_SAVE'}
-            )
 
     def get_generator(self):
-        g = FloorGenerator(self)
-        
+        g = FloorGenerator(self.parts)
         for part in self.parts:
             # type, radius, da, length
             g.add_part(part)
 
-        g.set_offset(self.x_offset)
+        g.set_offset()
 
-        g.close(self.x_offset)
+        g.close(self.closed)
         g.locate_manipulators()
-        for i, seg in enumerate(g.segs):
-            g.segs[i] = seg.line
-
         return g
 
     def update_parts(self, o):
@@ -1303,11 +1292,7 @@ class archipack_floor(ArchipackObject, ArchipackUserDefinedPath, Manipulable, Di
         # add rows
         for i in range(len(self.parts), self.n_parts):
             self.parts.add()
-        
-        for p in self.parts:
-            if p.uid == 0:
-                self.create_uid(p)
-        
+
         self.setup_manipulators()
 
         g = self.get_generator()
@@ -1328,26 +1313,71 @@ class archipack_floor(ArchipackObject, ArchipackUserDefinedPath, Manipulable, Di
             elif edge.verts[0].co.z != edge.verts[1].co.z:  # not horizontal, so they are vertical seams
                 edge.seam = True
 
+    def is_cw(self, pts):
+        p0 = pts[0]
+        d = 0
+        for p in pts[1:]:
+            d += (p.x * p0.y - p.y * p0.x)
+            p0 = p
+        return d > 0
+
+    def interpolate_bezier(self, pts, wM, p0, p1, resolution):
+        # straight segment, worth testing here
+        # since this can lower points count by a resolution factor
+        # use normalized to handle non linear t
+        if resolution == 0:
+            pts.append(wM @ p0.co.to_3d())
+        else:
+            v = (p1.co - p0.co).normalized()
+            d1 = (p0.handle_right - p0.co).normalized()
+            d2 = (p1.co - p1.handle_left).normalized()
+            if d1 == v and d2 == v:
+                pts.append(wM @ p0.co.to_3d())
+            else:
+                seg = interpolate_bezier(wM @ p0.co,
+                    wM @ p0.handle_right,
+                    wM @ p1.handle_left,
+                    wM @ p1.co,
+                    resolution + 1)
+                for i in range(resolution):
+                    pts.append(seg[i].to_3d())
+
     def from_spline(self, context, wM, resolution, spline):
-        
-        pts = self.coords_from_spline(
-            spline, 
-            wM, 
-            resolution, 
-            ccw=True,
-            close=True
-            )
-        
+        pts = []
+        if spline.type == 'POLY':
+            pts = [wM @ p.co.to_3d() for p in spline.points]
+            if spline.use_cyclic_u:
+                pts.append(pts[0])
+        elif spline.type == 'BEZIER':
+            points = spline.bezier_points
+            for i in range(1, len(points)):
+                p0 = points[i - 1]
+                p1 = points[i]
+                self.interpolate_bezier(pts, wM, p0, p1, resolution)
+            if spline.use_cyclic_u:
+                p0 = points[-1]
+                p1 = points[0]
+                self.interpolate_bezier(pts, wM, p0, p1, resolution)
+                pts.append(pts[0])
+            else:
+                pts.append(wM @ points[-1].co)
+
+        pt = wM.inverted() @ pts[0]
+
         # pretranslate
-        o = self.find_in_selection(context)
-        o.matrix_world = Matrix.Translation(pts[0].copy())
+        o = self.find_in_selection(context, self.auto_update)
+        o.matrix_world = wM @ Matrix.Translation(pt)
         self.from_points(pts)
 
     def from_points(self, pts):
 
-        last_state = self.auto_update
+        if self.is_cw(pts):
+            pts = list(reversed(pts))
+
         self.auto_update = False
+
         self.n_parts = len(pts) - 1
+
         self.update_parts(None)
 
         p0 = pts.pop(0)
@@ -1369,16 +1399,16 @@ class archipack_floor(ArchipackObject, ArchipackUserDefinedPath, Manipulable, Di
             p0 = p1
 
         self.closed = True
-        self.auto_update = last_state
+        self.auto_update = True
 
     def update_path(self, context):
-        o = context.scene.objects.get(self.user_defined_path)
-        if o is not None and o.type == 'CURVE':
+        user_def_path = context.scene.objects.get(self.user_defined_path.strip())
+        if user_def_path is not None and user_def_path.type == 'CURVE':
             self.from_spline(
                 context,
-                o.matrix_world,
+                user_def_path.matrix_world,
                 self.user_defined_resolution,
-                o.data.splines[0])
+                user_def_path.data.splines[0])
 
     def add_manipulator(self, name, pt1, pt2, pt3):
         m = self.manipulators.add()
@@ -1464,11 +1494,9 @@ class archipack_floor(ArchipackObject, ArchipackUserDefinedPath, Manipulable, Di
 
         g = self.update_parts(o)
 
-        g.cut(context, o, self)
+        g.cut(context, o)
         g.floor(context, o, self)
-        
-        self.update_dimensions(context, o)
-        
+
         # enable manipulators rebuild
         if manipulable_refresh:
             self.manipulable_refresh = True
@@ -1534,18 +1562,23 @@ def update_operation(self, context):
 
 
 class archipack_floor_cutter_segment(ArchipackCutterPart, PropertyGroup):
-    manipulators = CollectionProperty(type=archipack_manipulator)
-    type = EnumProperty(
+    manipulators : CollectionProperty(type=archipack_manipulator)
+    type : EnumProperty(
         name="Type",
         items=(
-            ('DEFAULT', 'Side', 'Side with rake'),
+            ('DEFAULT', 'Side', 'Side with rake', 0),
+            ('BOTTOM', 'Bottom', 'Bottom with gutter', 1),
+            ('LINK', 'Side link', 'Side without decoration', 2),
+            ('AXIS', 'Top', 'Top part with hip and beam', 3)
+            # ('LINK_VALLEY', 'Side valley', 'Side with valley', 3),
+            # ('LINK_HIP', 'Side hip', 'Side with hip', 4)
             ),
         default='DEFAULT',
         update=update_hole
         )
 
     def find_in_selection(self, context):
-        selected = [o for o in context.selected_objects]
+        selected = context.selected_objects[:]
         for o in selected:
             d = archipack_floor_cutter.datablock(o)
             if d:
@@ -1562,8 +1595,8 @@ class archipack_floor_cutter_segment(ArchipackCutterPart, PropertyGroup):
         box.prop(self, "a0")
 
 
-class archipack_floor_cutter(ArchipackCutter, ArchipackObject, Manipulable, DimensionProvider, PropertyGroup):
-    parts = CollectionProperty(type=archipack_floor_cutter_segment)
+class archipack_floor_cutter(ArchipackCutter, ArchipackObject, Manipulable, PropertyGroup):
+    parts : CollectionProperty(type=archipack_floor_cutter_segment)
 
     def update_points(self, context, o, pts, update_parent=False):
         """
@@ -1579,11 +1612,11 @@ class archipack_floor_cutter(ArchipackCutter, ArchipackObject, Manipulable, Dime
 
         d = archipack_floor.datablock(o.parent)
         if d is not None:
-            o.parent.select = True
-            context.scene.objects.active = o.parent
+            o.parent.select_set(state=True)
+            context.view_layer.objects.active = o.parent
             d.update(context)
-        o.parent.select = False
-        context.scene.objects.active = o
+        o.parent.select_set(state=False)
+        context.view_layer.objects.active = o
 
 
 # ------------------------------------------------------------------
@@ -1596,7 +1629,7 @@ class ARCHIPACK_PT_floor(Panel):
     bl_label = "Flooring"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
-    bl_category = "Archipack"
+    bl_category = 'Archipack'
 
     @classmethod
     def poll(cls, context):
@@ -1612,9 +1645,8 @@ class ARCHIPACK_PT_floor(Panel):
         # retrieve datablock of your object
         props = archipack_floor.datablock(o)
         # manipulate
-        row = layout.row(align=True)
-        row.operator("archipack.manipulate", icon="HAND")
-        row.operator("archipack.floor", text="Delete", icon='ERROR').mode = 'DELETE'
+        layout.operator("archipack.floor_manipulate", icon="VIEW_PAN")
+        layout.separator()
         box = layout.box()
         row = box.row(align=True)
 
@@ -1623,33 +1655,33 @@ class ARCHIPACK_PT_floor(Panel):
                      text=bpy.types.ARCHIPACK_OT_floor_preset_menu.bl_label)
         row.operator("archipack.floor_preset",
                       text="",
-                      icon='ZOOMIN')
+                      icon='ADD')
         row.operator("archipack.floor_preset",
                       text="",
-                      icon='ZOOMOUT').remove_active = True
+                      icon='REMOVE').remove_active = True
 
         box = layout.box()
         box.operator('archipack.floor_cutter').parent = o.name
 
         box = layout.box()
-        props.draw_user_path(box, context)
-        
-        box.prop(props, 'x_offset')
+        box.label(text="From curve")
+        box.prop_search(props, "user_defined_path", scene, "objects", text="", icon='OUTLINER_OB_CURVE')
+        if props.user_defined_path != "":
+            box.prop(props, 'user_defined_resolution')
 
         box = layout.box()
         row = box.row()
         if props.parts_expand:
-            row.prop(props, 'parts_expand', icon="TRIA_DOWN", icon_only=True, text="Parts", emboss=False)
+            row.prop(props, 'parts_expand', icon="TRIA_DOWN", text="Parts", emboss=False)
             box.prop(props, 'n_parts')
+            # box.prop(prop, 'closed')
             for i, part in enumerate(props.parts):
                 part.draw(context, layout, i)
         else:
-            row.prop(props, 'parts_expand', icon="TRIA_RIGHT", icon_only=True, text="Parts", emboss=False)
-        
+            row.prop(props, 'parts_expand', icon="TRIA_RIGHT", text="Parts", emboss=False)
         layout.separator()
         box = layout.box()
         box.prop(props, 'pattern', text="")
-        box.prop(props, 'rotation')
         # thickness
         box.separator()
         box.prop(props, 'thickness')
@@ -1724,7 +1756,7 @@ class ARCHIPACK_PT_floor_cutter(Panel):
     bl_label = "Floor Cutter"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = 'ArchiPack'
+    bl_category = 'Archipack'
 
     @classmethod
     def poll(cls, context):
@@ -1737,8 +1769,18 @@ class ARCHIPACK_PT_floor_cutter(Panel):
         layout = self.layout
         scene = context.scene
         box = layout.box()
-        box.operator('archipack.manipulate', icon='HAND')
+        box.operator('archipack.floor_cutter_manipulate', icon='VIEW_PAN')
         box.prop(prop, 'operation', text="")
+        box = layout.box()
+        box.label(text="From curve")
+        box.prop_search(prop, "user_defined_path", scene, "objects", text="", icon='OUTLINER_OB_CURVE')
+        if prop.user_defined_path != "":
+            box.prop(prop, 'user_defined_resolution')
+            # box.prop(prop, 'x_offset')
+            # box.prop(prop, 'angle_limit')
+        """
+        box.prop_search(prop, "boundary", scene, "objects", text="", icon='OUTLINER_OB_CURVE')
+        """
         prop.draw(layout, context)
 
 
@@ -1753,13 +1795,6 @@ class ARCHIPACK_OT_floor(ArchipackCreateTool, Operator):
     bl_description = "Floor"
     bl_category = 'Archipack'
     bl_options = {'REGISTER', 'UNDO'}
-    mode = EnumProperty(
-            items=(
-            ('CREATE', 'Create', '', 0),
-            ('DELETE', 'Delete', '', 1)
-            ),
-            default='CREATE'
-            )
 
     def create(self, context):
         """
@@ -1786,31 +1821,22 @@ class ARCHIPACK_OT_floor(ArchipackCreateTool, Operator):
         p.a0 = angle_90
         p.length = x
         d.n_parts = 4
-        context.scene.objects.link(o)
-        o.select = True
-        context.scene.objects.active = o
+        self.link_object_to_scene(context, o)
+        o.select_set(state=True)
+        context.view_layer.objects.active = o
         self.load_preset(d)
         self.add_material(o)
         return o
 
-    def delete(self, context):
-        o = context.active_object
-        if archipack_floor.filter(o):
-            bpy.ops.archipack.disable_manipulate()
-            self.delete_object(context, o)
-
     def execute(self, context):
         if context.mode == "OBJECT":
-            if self.mode == 'CREATE':
-                bpy.ops.object.select_all(action="DESELECT")
-                o = self.create(context)
-                o.location = context.scene.cursor_location
-                # activate manipulators at creation time
-                o.select = True
-                context.scene.objects.active = o
-                self.manipulate()
-            else:
-                self.delete(context)
+            bpy.ops.object.select_all(action="DESELECT")
+            o = self.create(context)
+            o.location = context.scene.cursor.location
+            # activate manipulators at creation time
+            o.select_set(state=True)
+            context.view_layer.objects.active = o
+            self.manipulate()
             return {'FINISHED'}
         else:
             self.report({'WARNING'}, "Option only valid in Object mode")
@@ -1835,7 +1861,7 @@ class ARCHIPACK_OT_floor_from_curve(ArchipackCreateTool, Operator):
     def draw(self, context):
         layout = self.layout
         row = layout.row()
-        row.label("Use Properties panel (N) to define parms", icon='INFO')
+        row.label(text="Use Properties panel (N) to define parms", icon='INFO')
 
     def create(self, context):
         curve = context.active_object
@@ -1861,7 +1887,7 @@ class ARCHIPACK_OT_floor_from_curve(ArchipackCreateTool, Operator):
 class ARCHIPACK_OT_floor_from_wall(ArchipackCreateTool, Operator):
     bl_idname = "archipack.floor_from_wall"
     bl_label = "->Floor"
-    bl_description = "Create floor(s) from a wall"
+    bl_description = "Create a floor from a wall"
     bl_category = 'Archipack'
     bl_options = {'REGISTER', 'UNDO'}
 
@@ -1870,73 +1896,11 @@ class ARCHIPACK_OT_floor_from_wall(ArchipackCreateTool, Operator):
         o = context.active_object
         return o is not None and o.data is not None and 'archipack_wall2' in o.data
 
-    def floor_from_wall(self, context, w, wd):
-        """
-         Create flooring from surrounding wall
-         Use slab cutters, windows and doors, T childs walls
-        """
-        # wall is either a single or collection of polygons
-        io, wall, childs = wd.as_geom(context, w, 'FLOORS', [], [], [])
-        ref = None
-        # find slab holes if any
-        cutters = []
-        if w.parent:
-            ref = w.parent
-            for c in ref.children:
-                if c.data and "archipack_slab" in c.data:
-                    for cutter in c.children:
-                        cd = cutter.data
-                        if cd and "archipack_slab_cutter" in cd:
-                            coords = cd.archipack_slab_cutter[0].get_coords()
-                            poly = io.coords_to_polygon(cutter.matrix_world, coords)
-                            cutters.append(poly)
-        o = None
-        # Multipolygon
-        if wall.type_id == 6:
-            polys = wall.geoms
-        else:
-            polys = [wall]
-        for poly in polys:
-            boundary = io._to_curve(poly.exterior, "{}-boundary".format(w.name), '2D')
-            bpy.ops.archipack.floor(auto_manipulate=False, filepath=self.filepath)
-            o = context.active_object
-            o.matrix_world = w.matrix_world.copy()
-            if ref is not None:
-                o.parent = ref
-            d = archipack_floor.datablock(o)
-            d.auto_update = False
-            d.thickness = wd.z_offset
-            d.user_defined_path = boundary.name
-            self.delete_object(context, boundary)
-            d.user_defined_path = ""
-            for hole in poly.interiors:
-                curve = io._to_curve(hole, "{}-cut".format(o.name), '3D')
-                bpy.ops.archipack.floor_cutter(auto_manipulate=False, parent=o.name, curve=curve.name)
-                c = context.active_object
-                cd = archipack_floor_cutter.datablock(c)
-                cd.user_defined_path = ""
-                self.delete_object(context, curve)
-            for cutter in cutters:
-                if poly.intersects(cutter):
-                    curve = io._to_curve(cutter, "{}-cut".format(o.name), '3D')
-                    bpy.ops.archipack.floor_cutter(auto_manipulate=False, parent=o.name, curve=curve.name)
-                    c = context.active_object
-                    cd = archipack_floor_cutter.datablock(c)
-                    cd.user_defined_path = ""
-                    self.delete_object(context, curve)
-            o.select = True
-            context.scene.objects.active = o
-            d.auto_update = True
-            o.location.z -= wd.z_offset
-        return o
-
     def create(self, context):
         wall = context.active_object
         wd = wall.data.archipack_wall2[0]
-        o = self.floor_from_wall(context, wall, wd)
-        """
         bpy.ops.archipack.floor(auto_manipulate=False, filepath=self.filepath)
-        o = context.scene.objects.active
+        o = context.view_layer.objects.active
         d = archipack_floor.datablock(o)
         d.auto_update = False
         d.closed = True
@@ -1952,16 +1916,9 @@ class ARCHIPACK_OT_floor_from_wall(ArchipackCreateTool, Operator):
             p.radius = part.radius
             p.da = part.da
             p.a0 = part.a0
-
-        side = 1
-        if wd.flip:
-            side = -1
-        d.x_offset = -side * 0.5 * (1 - wd.x_offset) * wd.width
-
         d.auto_update = True
         # pretranslate
         o.matrix_world = wall.matrix_world.copy()
-        """
         return o
 
     # -----------------------------------------------------
@@ -1971,12 +1928,10 @@ class ARCHIPACK_OT_floor_from_wall(ArchipackCreateTool, Operator):
         if context.mode == "OBJECT":
             bpy.ops.object.select_all(action="DESELECT")
             o = self.create(context)
-            if o is None:
-                return {'FINISHED'}
-            o.select = True
-            context.scene.objects.active = o
-            # if self.auto_manipulate:
-            #    bpy.ops.archipack.manipulate('INVOKE_DEFAULT')
+            o.select_set(state=True)
+            context.view_layer.objects.active = o
+            if self.auto_manipulate:
+                bpy.ops.archipack.floor_manipulate('INVOKE_DEFAULT')
             return {'FINISHED'}
         else:
             self.report({'WARNING'}, "Archipack: Option only valid in Object mode")
@@ -1990,16 +1945,13 @@ class ARCHIPACK_OT_floor_cutter(ArchipackCreateTool, Operator):
     bl_category = 'Archipack'
     bl_options = {'REGISTER', 'UNDO'}
 
-    parent = StringProperty("")
-    curve = StringProperty("")
+    parent : StringProperty("")
 
     def create(self, context):
         m = bpy.data.meshes.new("Floor Cutter")
         o = bpy.data.objects.new("Floor Cutter", m)
         d = m.archipack_floor_cutter.add()
-        parent = context.scene.objects.get(self.parent)
-        curve = context.scene.objects.get(self.curve)
-
+        parent = context.scene.objects.get(self.parent.strip())
         if parent is not None:
             o.parent = parent
             bbox = parent.bound_box
@@ -2008,13 +1960,12 @@ class ARCHIPACK_OT_floor_cutter(ArchipackCreateTool, Operator):
             x1, y1, z = bbox[6]
             x = 0.2 * (x1 - x0)
             y = 0.2 * (y1 - y0)
-            o.matrix_world = parent.matrix_world * Matrix([
+            o.matrix_world = parent.matrix_world @ Matrix([
                 [1, 0, 0, -3 * x],
                 [0, 1, 0, 0],
                 [0, 0, 1, 0],
                 [0, 0, 0, 1]
                 ])
-            d.auto_update = False
             p = d.parts.add()
             p.a0 = - angle_90
             p.length = y
@@ -2025,20 +1976,19 @@ class ARCHIPACK_OT_floor_cutter(ArchipackCreateTool, Operator):
             p.a0 = angle_90
             p.length = y
             d.n_parts = 3
-            d.auto_update = True
-            
+            # d.close = True
+            pd = archipack_floor.datablock(parent)
+            pd.boundary = o.name
         else:
-            o.location = context.scene.cursor_location
+            o.location = context.scene.cursor.location
         # make manipulators selectable
         d.manipulable_selectable = True
-        context.scene.objects.link(o)
-        o.select = True
-        context.scene.objects.active = o
+        self.link_object_to_scene(context, o)
+        o.select_set(state=True)
+        context.view_layer.objects.active = o
+        # self.add_material(o)
         self.load_preset(d)
         update_operation(d, context)
-        
-        if curve is not None:
-            d.user_defined_path = curve.name
         return o
 
     # -----------------------------------------------------
@@ -2048,8 +1998,8 @@ class ARCHIPACK_OT_floor_cutter(ArchipackCreateTool, Operator):
         if context.mode == "OBJECT":
             bpy.ops.object.select_all(action="DESELECT")
             o = self.create(context)
-            o.select = True
-            context.scene.objects.active = o
+            o.select_set(state=True)
+            context.view_layer.objects.active = o
             self.manipulate()
             return {'FINISHED'}
         else:
@@ -2058,49 +2008,17 @@ class ARCHIPACK_OT_floor_cutter(ArchipackCreateTool, Operator):
 
 
 # ------------------------------------------------------------------
-# Define operator class to load presets (with polls)
+# Define operator class to manipulate object
 # ------------------------------------------------------------------
 
 
 class ARCHIPACK_OT_floor_preset_menu(PresetMenuOperator, Operator):
-    bl_description = "Create Floor from presets"
+    bl_description = "Show Floor presets"
     bl_idname = "archipack.floor_preset_menu"
     bl_label = "Floor preset"
     preset_subdir = "archipack_floor"
 
-    
-class ARCHIPACK_OT_floor_preset_from_wall(PresetMenuOperator, Operator):
-    bl_description = "Floor from wall"
-    bl_idname = "archipack.floor_preset_from_wall"
-    bl_label = "-> Floor"
-    preset_subdir = "archipack_floor"
-    preset_operator = StringProperty(
-        options={'SKIP_SAVE'},
-        default="archipack.floor_from_wall"
-    )
-    
-    @classmethod
-    def poll(self, context):
-        o = context.active_object
-        return o and o.data and "archipack_wall2" in o.data   
-    
-    
-class ARCHIPACK_OT_floor_preset_from_curve(PresetMenuOperator, Operator):
-    bl_description = "Floor from curve"
-    bl_idname = "archipack.floor_preset_from_curve"
-    bl_label = "-> Floor"
-    preset_subdir = "archipack_floor"
-    preset_operator = StringProperty(
-        options={'SKIP_SAVE'},
-        default="archipack.floor_from_curve"
-    )
-    
-    @classmethod
-    def poll(self, context):
-        o = context.active_object
-        return o and o.type == 'CURVE'
-    
-    
+
 class ARCHIPACK_OT_floor_preset(ArchipackPreset, Operator):
     """Add a Floor Preset"""
     bl_idname = "archipack.floor_preset"
@@ -2112,22 +2030,54 @@ class ARCHIPACK_OT_floor_preset(ArchipackPreset, Operator):
         return ['manipulators', 'parts', 'n_parts', 'user_defined_path', 'user_defined_resolution']
 
 
+class ARCHIPACK_OT_floor_manipulate(Operator):
+    bl_idname = "archipack.floor_manipulate"
+    bl_label = "Manipulate"
+    bl_description = "Manipulate"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(self, context):
+        return archipack_floor.filter(context.active_object)
+
+    def invoke(self, context, event):
+        d = archipack_floor.datablock(context.active_object)
+        d.manipulable_invoke(context)
+        return {'FINISHED'}
+
+
+class ARCHIPACK_OT_floor_cutter_manipulate(Operator):
+    bl_idname = "archipack.floor_cutter_manipulate"
+    bl_label = "Manipulate"
+    bl_description = "Manipulate"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(self, context):
+        return archipack_floor_cutter.filter(context.active_object)
+
+    def invoke(self, context, event):
+        d = archipack_floor_cutter.datablock(context.active_object)
+        d.manipulable_invoke(context)
+        return {'FINISHED'}
+
+
 def register():
     bpy.utils.register_class(archipack_floor_cutter_segment)
     bpy.utils.register_class(archipack_floor_cutter)
     Mesh.archipack_floor_cutter = CollectionProperty(type=archipack_floor_cutter)
     bpy.utils.register_class(ARCHIPACK_OT_floor_cutter)
     bpy.utils.register_class(ARCHIPACK_PT_floor_cutter)
+    bpy.utils.register_class(ARCHIPACK_OT_floor_cutter_manipulate)
 
     bpy.utils.register_class(archipack_floor_part)
     bpy.utils.register_class(archipack_floor)
     Mesh.archipack_floor = CollectionProperty(type=archipack_floor)
     bpy.utils.register_class(ARCHIPACK_PT_floor)
     bpy.utils.register_class(ARCHIPACK_OT_floor)
-    bpy.utils.register_class(ARCHIPACK_OT_floor_preset_from_wall)
-    bpy.utils.register_class(ARCHIPACK_OT_floor_preset_from_curve)
     bpy.utils.register_class(ARCHIPACK_OT_floor_preset_menu)
     bpy.utils.register_class(ARCHIPACK_OT_floor_preset)
+    bpy.utils.register_class(ARCHIPACK_OT_floor_manipulate)
     bpy.utils.register_class(ARCHIPACK_OT_floor_from_curve)
     bpy.utils.register_class(ARCHIPACK_OT_floor_from_wall)
 
@@ -2138,15 +2088,15 @@ def unregister():
     del Mesh.archipack_floor_cutter
     bpy.utils.unregister_class(ARCHIPACK_OT_floor_cutter)
     bpy.utils.unregister_class(ARCHIPACK_PT_floor_cutter)
+    bpy.utils.unregister_class(ARCHIPACK_OT_floor_cutter_manipulate)
 
     bpy.utils.unregister_class(archipack_floor_part)
     bpy.utils.unregister_class(archipack_floor)
     del Mesh.archipack_floor
     bpy.utils.unregister_class(ARCHIPACK_PT_floor)
     bpy.utils.unregister_class(ARCHIPACK_OT_floor)
-    bpy.utils.unregister_class(ARCHIPACK_OT_floor_preset_from_wall)
-    bpy.utils.unregister_class(ARCHIPACK_OT_floor_preset_from_curve)
     bpy.utils.unregister_class(ARCHIPACK_OT_floor_preset_menu)
     bpy.utils.unregister_class(ARCHIPACK_OT_floor_preset)
+    bpy.utils.unregister_class(ARCHIPACK_OT_floor_manipulate)
     bpy.utils.unregister_class(ARCHIPACK_OT_floor_from_curve)
     bpy.utils.unregister_class(ARCHIPACK_OT_floor_from_wall)

@@ -40,8 +40,6 @@ from .archipack_manipulator import Manipulable, archipack_manipulator
 from .archipack_2d import Line, Arc
 from .archipack_preset import ArchipackPreset, PresetMenuOperator
 from .archipack_object import ArchipackCreateTool, ArchipackObject
-from .archipack_polylines import Io
-from .archipack_dimension import DimensionProvider
 
 
 class Stair():
@@ -98,97 +96,85 @@ class Stair():
 
     def p3d_left(self, verts, p2d, i, t, landing=False):
         x, y = p2d
-        if self.z_mode == '2D':
-            verts.append((x, y, 0))
+        nose_z = min(self.step_height, self.nose_z)
+        zl = self.z0 + t * self.height
+        zs = self.z0 + i * self.step_height
+        if self.z_mode == 'LINEAR':
+            z0 = max(0, zl)
+            z1 = z0 - self.bottom_z
+            verts.extend([(x, y, z0), (x, y, z1)])
         else:
-            nose_z = min(self.step_height, self.nose_z)
-            zl = self.z0 + t * self.height
-            zs = self.z0 + i * self.step_height
-            if self.z_mode == 'LINEAR':
-                z0 = max(0, zl)
-                z1 = z0 - self.bottom_z
-                verts.extend([(x, y, z0), (x, y, z1)])
+            if "FULL" in self.steps_type:
+                z0 = 0
             else:
+                z0 = max(0, zl - nose_z - self.bottom_z)
+            z3 = zs + max(0, self.step_height - nose_z)
+            z4 = zs + self.step_height
+            if landing:
                 if "FULL" in self.steps_type:
-                    z0 = 0
+                    z2 = 0
+                    z1 = 0
                 else:
-                    z0 = max(0, zl - nose_z - self.bottom_z)
-                z3 = zs + max(0, self.step_height - nose_z)
-                z4 = zs + self.step_height
-                if landing:
-                    if "FULL" in self.steps_type:
-                        z2 = 0
-                        z1 = 0
-                    else:
-                        z2 = max(0, min(z3, z3 - self.bottom_z))
-                        z1 = z2
-                else:
-                    z1 = min(z3, max(z0, zl - nose_z))
-                    z2 = min(z3, max(z1, zl))
-                verts.extend([(x, y, z0),
-                            (x, y, z1),
-                            (x, y, z2),
-                            (x, y, z3),
-                            (x, y, z4)])
+                    z2 = max(0, min(z3, z3 - self.bottom_z))
+                    z1 = z2
+            else:
+                z1 = min(z3, max(z0, zl - nose_z))
+                z2 = min(z3, max(z1, zl))
+            verts.extend([(x, y, z0),
+                        (x, y, z1),
+                        (x, y, z2),
+                        (x, y, z3),
+                        (x, y, z4)])
 
     def p3d_right(self, verts, p2d, i, t, landing=False):
         x, y = p2d
-        if self.z_mode == '2D':
-            verts.append((x, y, 0))
+        nose_z = min(self.step_height, self.nose_z)
+        zl = self.z0 + t * self.height
+        zs = self.z0 + i * self.step_height
+        if self.z_mode == 'LINEAR':
+            z0 = max(0, zl)
+            z1 = z0 - self.bottom_z
+            verts.extend([(x, y, z1), (x, y, z0)])
         else:
-            nose_z = min(self.step_height, self.nose_z)
-            zl = self.z0 + t * self.height
-            zs = self.z0 + i * self.step_height
-            if self.z_mode == 'LINEAR':
-                z0 = max(0, zl)
-                z1 = z0 - self.bottom_z
-                verts.extend([(x, y, z1), (x, y, z0)])
+            if "FULL" in self.steps_type:
+                z0 = 0
             else:
+                z0 = max(0, zl - nose_z - self.bottom_z)
+            z3 = zs + max(0, self.step_height - nose_z)
+            z4 = zs + self.step_height
+            if landing:
                 if "FULL" in self.steps_type:
-                    z0 = 0
+                    z2 = 0
+                    z1 = 0
                 else:
-                    z0 = max(0, zl - nose_z - self.bottom_z)
-                z3 = zs + max(0, self.step_height - nose_z)
-                z4 = zs + self.step_height
-                if landing:
-                    if "FULL" in self.steps_type:
-                        z2 = 0
-                        z1 = 0
-                    else:
-                        z2 = max(0, min(z3, z3 - self.bottom_z))
-                        z1 = z2
-                else:
-                    z1 = min(z3, max(z0, zl - nose_z))
-                    z2 = min(z3, max(z1, zl))
-                verts.extend([(x, y, z4),
-                              (x, y, z3),
-                              (x, y, z2),
-                              (x, y, z1),
-                              (x, y, z0)])
+                    z2 = max(0, min(z3, z3 - self.bottom_z))
+                    z1 = z2
+            else:
+                z1 = min(z3, max(z0, zl - nose_z))
+                z2 = min(z3, max(z1, zl))
+            verts.extend([(x, y, z4),
+                          (x, y, z3),
+                          (x, y, z2),
+                          (x, y, z1),
+                          (x, y, z0)])
 
     def p3d_cstep_left(self, verts, p2d, i, t):
         x, y = p2d
-        if self.z_mode == '2D':
-            verts.append((x, y, 0))
-        else:
-            nose_z = min(self.step_height, self.nose_z)
-            zs = self.z0 + i * self.step_height
-            z3 = zs + max(0, self.step_height - nose_z)
-            z1 = min(z3, zs - nose_z)
-            verts.append((x, y, z1))
-            verts.append((x, y, z3))
+        nose_z = min(self.step_height, self.nose_z)
+        zs = self.z0 + i * self.step_height
+        z3 = zs + max(0, self.step_height - nose_z)
+        z1 = min(z3, zs - nose_z)
+        verts.append((x, y, z1))
+        verts.append((x, y, z3))
 
     def p3d_cstep_right(self, verts, p2d, i, t):
         x, y = p2d
-        if self.z_mode == '2D':
-            verts.append((x, y, 0))
-        else:
-            nose_z = min(self.step_height, self.nose_z)
-            zs = self.z0 + i * self.step_height
-            z3 = zs + max(0, self.step_height - nose_z)
-            z1 = min(z3, zs - nose_z)
-            verts.append((x, y, z3))
-            verts.append((x, y, z1))
+        nose_z = min(self.step_height, self.nose_z)
+        zs = self.z0 + i * self.step_height
+        z3 = zs + max(0, self.step_height - nose_z)
+        z1 = min(z3, zs - nose_z)
+        verts.append((x, y, z3))
+        verts.append((x, y, z1))
 
     def straight_stair(self, length):
         self.next_type = 'STAIR'
@@ -248,16 +234,16 @@ class Stair():
 
     def project_uv(self, rM, uvs, verts, indexes, up_axis='Z'):
         if up_axis == 'Z':
-            uvs.append([(rM * Vector(verts[i])).to_2d() for i in indexes])
+            uvs.append([(rM @ Vector(verts[i])).to_2d() for i in indexes])
         elif up_axis == 'Y':
-            uvs.append([(x, z) for x, y, z in [(rM * Vector(verts[i])) for i in indexes]])
+            uvs.append([(x, z) for x, y, z in [(rM @ Vector(verts[i])) for i in indexes]])
         else:
-            uvs.append([(y, z) for x, y, z in [(rM * Vector(verts[i])) for i in indexes]])
+            uvs.append([(y, z) for x, y, z in [(rM @ Vector(verts[i])) for i in indexes]])
 
     def get_proj_matrix(self, part, t, nose_y):
         # a matrix to project verts
         # into uv space for horizontal parts of this step
-        # so uv = (rM * vertex).to_2d()
+        # so uv = (rM @ vertex).to_2d()
         tl = t - nose_y / self.get_length("LEFT")
         tr = t - nose_y / self.get_length("RIGHT")
         t2, part, dz, shape = self.get_part(tl, "LEFT")
@@ -273,21 +259,18 @@ class Stair():
         ]).inverted()
 
     def _make_nose(self, i, s, verts, faces, matids, uvs, nose_y):
-        f = len(verts)
-
-        if self.z_mode == '2D':
-            faces.append(f)
-            return
 
         t = self.t_step * i
 
         # a matrix to project verts
         # into uv space for horizontal parts of this step
-        # so uv = (rM * vertex).to_2d()
+        # so uv = (rM @ vertex).to_2d()
         rM = self.get_proj_matrix(self, t, nose_y)
 
         if self.z_mode == 'LINEAR':
             return rM
+
+        f = len(verts)
 
         tl = t - nose_y / self.get_length("LEFT")
         tr = t - nose_y / self.get_length("RIGHT")
@@ -361,9 +344,7 @@ class Stair():
 
     def make_faces(self, f, rM, verts, faces, matids, uvs):
 
-        if self.z_mode == '2D':
-            return
-        elif self.z_mode == 'LINEAR':
+        if self.z_mode == 'LINEAR':
             start = 0
             end = 3
             offset = 4
@@ -437,20 +418,19 @@ class StraightStair(Stair, Line):
         p = self.r_line.lerp(t0)
         self.p3d_right(verts, p, i, t0)
 
-        if self.z_mode != '2D':
-            t1 = t0 + self.t_step
+        t1 = t0 + self.t_step
 
-            p = self.l_line.lerp(t1)
-            self.p3d_left(verts, p, i, t1)
-            p = self.r_line.lerp(t1)
-            self.p3d_right(verts, p, i, t1)
+        p = self.l_line.lerp(t1)
+        self.p3d_left(verts, p, i, t1)
+        p = self.r_line.lerp(t1)
+        self.p3d_right(verts, p, i, t1)
 
-            self.make_faces(f, rM, verts, faces, matids, uvs)
+        self.make_faces(f, rM, verts, faces, matids, uvs)
 
-            if "OPEN" in self.steps_type:
-                faces.append((f + 13, f + 14, f + 15, f + 16))
-                matids.append(self.idmat_step_front)
-                uvs.append([(0, 0), (0, 1), (1, 1), (1, 0)])
+        if "OPEN" in self.steps_type:
+            faces.append((f + 13, f + 14, f + 15, f + 16))
+            matids.append(self.idmat_step_front)
+            uvs.append([(0, 0), (0, 1), (1, 1), (1, 0)])
 
     def get_length(self, side):
         return self.length
@@ -474,18 +454,10 @@ class StraightStair(Stair, Line):
     def get_part(self, t, side):
         if side == 'LEFT':
             part = self.l_line
-        elif side == '2D':
-            part = self
         else:
             part = self.r_line
         return t, part, self.height, 'LINE'
-    
-    def measure_point(self, d, uid):
-        p0 = self.l_line.p0.to_3d()
-        p1 = self.r_line.p0.to_3d()
-        d.add_dimension_point(uid, p0)
-        d.add_dimension_point(uid + 1, p1)
-        
+
 
 class CurvedStair(Stair, Arc):
     def __init__(self, c, radius, a0, da, left_offset, right_offset, steps_type, nose_type,
@@ -496,7 +468,7 @@ class CurvedStair(Stair, Arc):
         self.l_shape = left_shape
         self.r_shape = right_shape
         self.edges_multiples = round(abs(da), 6) > double_limit
-        # left arc, tangeant at start and end
+        # left arc, tangent at start and end
         self.l_arc, self.l_t0, self.l_t1, self.l_tc = self.set_offset(-left_offset, left_shape)
         self.r_arc, self.r_t0, self.r_t1, self.r_tc = self.set_offset(right_offset, right_shape)
 
@@ -607,8 +579,6 @@ class CurvedStair(Stair, Arc):
         if self.l_shape == 'CIRCLE' or self.r_shape == 'CIRCLE':
             # every 6 degree
             n_subs = max(1, int(abs(self.da) / pi * 30 / self.n_step))
-            if self.z_mode == '2D':
-                n_subs = max(1, int(abs(self.da) / pi * 60 / self.n_step))
             t_step = self.t_step / n_subs
             for j in range(n_subs):
                 f0 = f
@@ -620,31 +590,24 @@ class CurvedStair(Stair, Arc):
             f = self._make_step(self.t_step, i, i, verts)
             f = self._make_edge(self.t_step, i, i, f, rM, verts, faces, matids, uvs)
 
-        if self.z_mode != '2D':
+        self._make_step(self.t_step, i + 1, i, verts)
+        self.make_faces(f, rM, verts, faces, matids, uvs)
 
-            self._make_step(self.t_step, i + 1, i, verts)
-            self.make_faces(f, rM, verts, faces, matids, uvs)
-
-            if self.z_mode != 'LINEAR' and "OPEN" in self.steps_type:
-                # back face top
-                faces.append((f + 13, f + 14, f + 15, f + 16))
-                matids.append(self.idmat_step_front)
-                uvs.append([(0, 0), (0, 1), (1, 1), (1, 0)])
+        if "OPEN" in self.steps_type and self.z_mode != 'LINEAR':
+            # back face top
+            faces.append((f + 13, f + 14, f + 15, f + 16))
+            matids.append(self.idmat_step_front)
+            uvs.append([(0, 0), (0, 1), (1, 1), (1, 0)])
 
     def get_part(self, t, side):
         if side == 'RIGHT':
             arc = self.r_arc
             shape = self.r_shape
             t0, t1, tc = self.r_t0, self.r_t1, self.r_tc
-        elif side == '2D':
-            arc = self
-            shape = 'CIRCLE'
-            t0, t1, tc = self.l_t0, self.l_t1, self.l_tc
         else:
             arc = self.l_arc
             shape = self.l_shape
             t0, t1, tc = self.l_t0, self.l_t1, self.l_tc
-
         if shape == 'CIRCLE':
             return t, arc, self.height, shape
         else:
@@ -722,22 +685,7 @@ class CurvedStair(Stair, Arc):
         # print("respect_edges:%s t_step:%s n_step:%s" % (respect_edges, 1.0 / steps, int(steps)))
         return 1.0 / steps, int(steps)
 
-    def measure_point(self, d, uid):
-        p0 = self.l_t0.p0.to_3d()
-        p1 = self.r_t0.p0.to_3d()
-        if self.edges_multiples:
-            p2 = self.l_tc.p0.to_3d()
-            p3 = self.r_tc.p0.to_3d()
-            d.add_dimension_point(uid + 2, p2)
-            d.add_dimension_point(uid + 3, p3)
-        p4 = self.l_t1.p0.to_3d()
-        p5 = self.r_t1.p0.to_3d()
-        d.add_dimension_point(uid, p0)
-        d.add_dimension_point(uid + 1, p1)
-        d.add_dimension_point(uid + 4, p4)
-        d.add_dimension_point(uid + 5, p5)
-         
-        
+
 class StraightLanding(StraightStair):
     def __init__(self, p, v, left_offset, right_offset, steps_type,
             nose_type, z_mode, nose_z, bottom_z, last_type='STAIR'):
@@ -907,9 +855,8 @@ class CurvedLanding(CurvedStair):
 
 
 class StairGenerator():
-    def __init__(self, d):
-        self.d = d
-        self.parts = d.parts
+    def __init__(self, parts):
+        self.parts = parts
         self.last_type = 'NONE'
         self.stairs = []
         self.steps_type = 'NONE'
@@ -1002,8 +949,7 @@ class StairGenerator():
 
         for s, stair in enumerate(self.stairs):
             if s < len(self.parts):
-                part = self.parts[s]
-                manipulator = part.manipulators[0]
+                manipulator = self.parts[s].manipulators[0]
                 # Store Gl Points for manipulators
                 if 'Curved' in type(stair).__name__:
                     c = stair.c
@@ -1023,9 +969,7 @@ class StairGenerator():
                     manipulator.set_pts([(v0.x, v0.y, stair.top), (v1.x, v1.y, stair.top), (side, 0, 0)])
                     manipulator.type_key = 'SIZE'
                     manipulator.prop1_name = 'length'
-                
-            stair.measure_point(self.d, part.uid)
-                
+
             for i in range(stair.n_step):
                 stair.make_step(i, verts, faces, matids, uvs, nose_y=nose_y)
                 if s < len(self.stairs) - 1 and self.steps_type != 'OPEN' and \
@@ -1080,7 +1024,7 @@ class StairGenerator():
                 co.z += z1
             if 'Slope' in g:
                 co.z += co.y * slope
-            verts.append(tM * co)
+            verts.append(tM @ co)
         matids += self.user_defined_mat
         faces += [tuple([i + f for i in p.vertices]) for p in m.polygons]
         uvs += self.user_defined_uvs
@@ -1162,7 +1106,7 @@ class StairGenerator():
             if s < n_sections:
                 v1 = subs[s + 1][0].v.normalized()
             dir = (v0 + v1).normalized()
-            scale = 1 / cos(0.5 * acos(min(1, max(-1, v0 * v1))))
+            scale = 1 / cos(0.5 * acos(min(1, max(-1, v0.dot(v1)))))
             for p in profile:
                 x, y = n.p + scale * p.x * dir
                 z = zl + p.y + altitude
@@ -1415,8 +1359,6 @@ class StairGenerator():
     def make_profile(self, profile, idmat, side, slice, height, step_depth,
             x_offset, z_offset, extend, verts, faces, matids, uvs):
 
-        mode_2d = side == '2D'
-
         for stair in self.stairs:
             if 'Curved' in type(stair).__name__:
                 stair.l_arc, stair.l_t0, stair.l_t1, stair.l_tc = stair.set_offset(-x_offset, stair.l_shape)
@@ -1457,10 +1399,6 @@ class StairGenerator():
                     part = stair.l_line
                 else:
                     part = stair.r_line
-
-            if mode_2d:
-                part = stair
-                is_circle = 'Curved' in type(stair).__name__
 
             if is_circle:
                 n_step = 3 * stair.n_step
@@ -1525,7 +1463,7 @@ class StairGenerator():
                     if s < n_sections:
                         v1 = cur_sect[s + 1][0].v.normalized()
                     dir = (v0 + v1).normalized()
-                    scale = 1 / cos(0.5 * acos(min(1, max(-1, v0 * v1))))
+                    scale = 1 / cos(0.5 * acos(min(1, max(-1, v0.dot(v1)))))
                     for p in profile:
                         x, y = n.p + scale * p.x * dir
                         z = zl + p.y + z_offset
@@ -1535,23 +1473,22 @@ class StairGenerator():
                     p0 = p1
                     v0 = v1
 
-                if not mode_2d:
-                    # build faces using Panel
-                    lofter = Lofter(
-                        # closed_shape, index, x, y, idmat
-                        True,
-                        [i for i in range(len(profile))],
-                        [p.x for p in profile],
-                        [p.y for p in profile],
-                        [idmat for i in range(len(profile))],
-                        closed_path=False,
-                        user_path_uv_v=user_path_uv_v,
-                        user_path_verts=user_path_verts
-                        )
-                    faces += lofter.faces(16, offset=f, path_type='USER_DEFINED')
-                    matids += lofter.mat(16, idmat, idmat, path_type='USER_DEFINED')
-                    v = Vector((0, 0))
-                    uvs += lofter.uv(16, v, v, v, v, 0, v, 0, 0, path_type='USER_DEFINED')
+                # build faces using Panel
+                lofter = Lofter(
+                    # closed_shape, index, x, y, idmat
+                    True,
+                    [i for i in range(len(profile))],
+                    [p.x for p in profile],
+                    [p.y for p in profile],
+                    [idmat for i in range(len(profile))],
+                    closed_path=False,
+                    user_path_uv_v=user_path_uv_v,
+                    user_path_verts=user_path_verts
+                    )
+                faces += lofter.faces(16, offset=f, path_type='USER_DEFINED')
+                matids += lofter.mat(16, idmat, idmat, path_type='USER_DEFINED')
+                v = Vector((0, 0))
+                uvs += lofter.uv(16, v, v, v, v, 0, v, 0, 0, path_type='USER_DEFINED')
 
     def set_matids(self, id_materials):
         for stair in self.stairs:
@@ -1609,7 +1546,7 @@ materials_enum = (
 
 
 class archipack_stair_material(PropertyGroup):
-    index = EnumProperty(
+    index : EnumProperty(
         items=materials_enum,
         default='4',
         update=update
@@ -1620,7 +1557,7 @@ class archipack_stair_material(PropertyGroup):
             find witch selected object this instance belongs to
             provide support for "copy to selected"
         """
-        selected = [o for o in context.selected_objects]
+        selected = context.selected_objects[:]
         for o in selected:
             props = archipack_stair.datablock(o)
             if props:
@@ -1636,7 +1573,7 @@ class archipack_stair_material(PropertyGroup):
 
 
 class archipack_stair_part(PropertyGroup):
-    type = EnumProperty(
+    type : EnumProperty(
             items=(
                 ('S_STAIR', 'Straight stair', '', 0),
                 ('C_STAIR', 'Curved stair', '', 1),
@@ -1648,21 +1585,21 @@ class archipack_stair_part(PropertyGroup):
             default='S_STAIR',
             update=update_manipulators
             )
-    length = FloatProperty(
+    length : FloatProperty(
             name="Length",
             min=0.01,
             default=2.0,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    radius = FloatProperty(
+    radius : FloatProperty(
             name="Radius",
             min=0.01,
             default=0.7,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    da = FloatProperty(
+    da : FloatProperty(
             name="Angle",
             min=-pi,
             max=pi,
@@ -1670,7 +1607,7 @@ class archipack_stair_part(PropertyGroup):
             subtype='ANGLE', unit='ROTATION',
             update=update
             )
-    left_shape = EnumProperty(
+    left_shape : EnumProperty(
             items=(
                 ('RECTANGLE', 'Straight', '', 0),
                 ('CIRCLE', 'Curved ', '', 1)
@@ -1678,7 +1615,7 @@ class archipack_stair_part(PropertyGroup):
             default='RECTANGLE',
             update=update
             )
-    right_shape = EnumProperty(
+    right_shape : EnumProperty(
             items=(
                 ('RECTANGLE', 'Straight', '', 0),
                 ('CIRCLE', 'Curved ', '', 1)
@@ -1686,16 +1623,14 @@ class archipack_stair_part(PropertyGroup):
             default='RECTANGLE',
             update=update
             )
-    manipulators = CollectionProperty(type=archipack_manipulator)
-    # DimensionProvider
-    uid = IntProperty(default=0)
-    
+    manipulators : CollectionProperty(type=archipack_manipulator)
+
     def find_datablock_in_selection(self, context):
         """
             find witch selected object this instance belongs to
             provide support for "copy to selected"
         """
-        selected = [o for o in context.selected_objects]
+        selected = context.selected_objects[:]
         for o in selected:
             props = archipack_stair.datablock(o)
             if props:
@@ -1733,71 +1668,71 @@ class archipack_stair_part(PropertyGroup):
                 row.prop(self, "length")
 
 
-class archipack_stair(ArchipackObject, Manipulable, DimensionProvider, PropertyGroup):
+class archipack_stair(ArchipackObject, Manipulable, PropertyGroup):
 
-    parts = CollectionProperty(type=archipack_stair_part)
-    n_parts = IntProperty(
+    parts : CollectionProperty(type=archipack_stair_part)
+    n_parts : IntProperty(
             name="Parts",
             min=1,
             max=32,
             default=1, update=update_manipulators
             )
-    step_depth = FloatProperty(
+    step_depth : FloatProperty(
             name="Going",
             min=0.2,
             default=0.25,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    width = FloatProperty(
+    width : FloatProperty(
             name="Width",
             min=0.01,
             default=1.2,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    height = FloatProperty(
+    height : FloatProperty(
             name="Height",
             min=0.1,
             default=2.4, precision=2, step=1,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    nose_y = FloatProperty(
+    nose_y : FloatProperty(
             name="Depth",
             min=0.0,
             default=0.02, precision=2, step=1,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    x_offset = FloatProperty(
+    x_offset : FloatProperty(
             name="Offset",
             default=0.0, precision=2, step=1,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    nose_z = FloatProperty(
+    nose_z : FloatProperty(
             name="Height",
             min=0.001,
             default=0.03, precision=2, step=1,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    bottom_z = FloatProperty(
+    bottom_z : FloatProperty(
             name="Thickness",
             min=0.001,
             default=0.03, precision=2, step=1,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    radius = FloatProperty(
+    radius : FloatProperty(
             name="Radius",
             min=0.5,
             default=0.7,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    da = FloatProperty(
+    da : FloatProperty(
             name="Angle",
             min=-pi,
             max=pi,
@@ -1805,7 +1740,7 @@ class archipack_stair(ArchipackObject, Manipulable, DimensionProvider, PropertyG
             subtype='ANGLE', unit='ROTATION',
             update=update
             )
-    total_angle = FloatProperty(
+    total_angle : FloatProperty(
             name="Angle",
             min=-50 * pi,
             max=50 * pi,
@@ -1813,7 +1748,7 @@ class archipack_stair(ArchipackObject, Manipulable, DimensionProvider, PropertyG
             subtype='ANGLE', unit='ROTATION',
             update=update
             )
-    steps_type = EnumProperty(
+    steps_type : EnumProperty(
             name="Steps",
             items=(
                 ('CLOSED', 'Closed', '', 0),
@@ -1823,7 +1758,7 @@ class archipack_stair(ArchipackObject, Manipulable, DimensionProvider, PropertyG
             default='CLOSED',
             update=update
             )
-    nose_type = EnumProperty(
+    nose_type : EnumProperty(
             name="Nosing",
             items=(
                 ('STRAIGHT', 'Straight', '', 0),
@@ -1832,7 +1767,7 @@ class archipack_stair(ArchipackObject, Manipulable, DimensionProvider, PropertyG
             default='STRAIGHT',
             update=update
             )
-    left_shape = EnumProperty(
+    left_shape : EnumProperty(
             items=(
                 ('RECTANGLE', 'Straight', '', 0),
                 ('CIRCLE', 'Curved ', '', 1)
@@ -1840,7 +1775,7 @@ class archipack_stair(ArchipackObject, Manipulable, DimensionProvider, PropertyG
             default='RECTANGLE',
             update=update
             )
-    right_shape = EnumProperty(
+    right_shape : EnumProperty(
             items=(
                 ('RECTANGLE', 'Straight', '', 0),
                 ('CIRCLE', 'Curved ', '', 1)
@@ -1848,18 +1783,17 @@ class archipack_stair(ArchipackObject, Manipulable, DimensionProvider, PropertyG
             default='RECTANGLE',
             update=update
             )
-    z_mode = EnumProperty(
+    z_mode : EnumProperty(
             name="Interp z",
             items=(
                 ('STANDARD', 'Standard', '', 0),
                 ('LINEAR', 'Bottom Linear', '', 1),
-                ('LINEAR_TOP', 'All Linear', '', 2),
-                ('2D', '2d', '', 3)
+                ('LINEAR_TOP', 'All Linear', '', 2)
                 ),
             default='STANDARD',
             update=update
             )
-    presets = EnumProperty(
+    presets : EnumProperty(
             items=(
                 ('STAIR_I', 'I stair', '', 0),
                 ('STAIR_L', 'L stair', '', 1),
@@ -1869,131 +1803,131 @@ class archipack_stair(ArchipackObject, Manipulable, DimensionProvider, PropertyG
                 ),
             default='STAIR_I', update=update_preset
             )
-    left_post = BoolProperty(
+    left_post : BoolProperty(
             name='left',
             default=True,
             update=update
             )
-    right_post = BoolProperty(
+    right_post : BoolProperty(
             name='right',
             default=True,
             update=update
             )
-    post_spacing = FloatProperty(
+    post_spacing : FloatProperty(
             name="Spacing",
             min=0.1,
             default=1.0, precision=2, step=1,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    post_x = FloatProperty(
+    post_x : FloatProperty(
             name="Width",
             min=0.001,
             default=0.04, precision=2, step=1,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    post_y = FloatProperty(
+    post_y : FloatProperty(
             name="Length",
             min=0.001,
             default=0.04, precision=2, step=1,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    post_z = FloatProperty(
+    post_z : FloatProperty(
             name="Height",
             min=0.001,
             default=1, precision=2, step=1,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    post_alt = FloatProperty(
+    post_alt : FloatProperty(
             name="Altitude",
             min=-100,
             default=0, precision=2, step=1,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    post_offset_x = FloatProperty(
+    post_offset_x : FloatProperty(
             name="Offset",
             min=-100.0, max=100,
             default=0.02, precision=2, step=1,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    post_corners = BoolProperty(
+    post_corners : BoolProperty(
             name="Only on edges",
             update=update,
             default=False
             )
-    user_defined_post_enable = BoolProperty(
+    user_defined_post_enable : BoolProperty(
             name="User",
             update=update,
             default=True
             )
-    user_defined_post = StringProperty(
+    user_defined_post : StringProperty(
             name="User defined",
             update=update
             )
-    idmat_post = EnumProperty(
+    idmat_post : EnumProperty(
             name="Post",
             items=materials_enum,
             default='4',
             update=update
             )
-    left_subs = BoolProperty(
+    left_subs : BoolProperty(
             name='left',
             default=False,
             update=update
             )
-    right_subs = BoolProperty(
+    right_subs : BoolProperty(
             name='right',
             default=False,
             update=update
             )
-    subs_spacing = FloatProperty(
+    subs_spacing : FloatProperty(
             name="Spacing",
             min=0.05,
             default=0.10, precision=2, step=1,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    subs_x = FloatProperty(
+    subs_x : FloatProperty(
             name="Width",
             min=0.001,
             default=0.02, precision=2, step=1,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    subs_y = FloatProperty(
+    subs_y : FloatProperty(
             name="Length",
             min=0.001,
             default=0.02, precision=2, step=1,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    subs_z = FloatProperty(
+    subs_z : FloatProperty(
             name="Height",
             min=0.001,
             default=1, precision=2, step=1,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    subs_alt = FloatProperty(
+    subs_alt : FloatProperty(
             name="Altitude",
             min=-100,
             default=0, precision=2, step=1,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    subs_offset_x = FloatProperty(
+    subs_offset_x : FloatProperty(
             name="Offset",
             min=-100.0, max=100,
             default=0.0, precision=2, step=1,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    subs_bottom = EnumProperty(
+    subs_bottom : EnumProperty(
             name="Bottom",
             items=(
                 ('STEP', 'Follow step', '', 0),
@@ -2002,88 +1936,88 @@ class archipack_stair(ArchipackObject, Manipulable, DimensionProvider, PropertyG
             default='STEP',
             update=update
             )
-    user_defined_subs_enable = BoolProperty(
+    user_defined_subs_enable : BoolProperty(
             name="User",
             update=update,
             default=True
             )
-    user_defined_subs = StringProperty(
+    user_defined_subs : StringProperty(
             name="User defined",
             update=update
             )
-    idmat_subs = EnumProperty(
+    idmat_subs : EnumProperty(
             name="Subs",
             items=materials_enum,
             default='4',
             update=update
             )
-    left_panel = BoolProperty(
+    left_panel : BoolProperty(
             name='left',
             default=True,
             update=update
             )
-    right_panel = BoolProperty(
+    right_panel : BoolProperty(
             name='right',
             default=True,
             update=update
             )
-    panel_alt = FloatProperty(
+    panel_alt : FloatProperty(
             name="Altitude",
             default=0.25, precision=2, step=1,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    panel_x = FloatProperty(
+    panel_x : FloatProperty(
             name="Width",
             min=0.001,
             default=0.01, precision=2, step=1,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    panel_z = FloatProperty(
+    panel_z : FloatProperty(
             name="Height",
             min=0.001,
             default=0.6, precision=2, step=1,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    panel_dist = FloatProperty(
+    panel_dist : FloatProperty(
             name="Spacing",
             min=0.001,
             default=0.05, precision=2, step=1,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    panel_offset_x = FloatProperty(
+    panel_offset_x : FloatProperty(
             name="Offset",
             default=0.0, precision=2, step=1,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    idmat_panel = EnumProperty(
+    idmat_panel : EnumProperty(
             name="Panels",
             items=materials_enum,
             default='5',
             update=update
             )
-    left_rail = BoolProperty(
+    left_rail : BoolProperty(
             name="left",
             update=update,
             default=False
             )
-    right_rail = BoolProperty(
+    right_rail : BoolProperty(
             name="right",
             update=update,
             default=False
             )
-    rail_n = IntProperty(
+    rail_n : IntProperty(
             name="#",
             default=1,
             min=0,
             max=31,
             update=update
             )
-    rail_x = FloatVectorProperty(
+    rail_x : FloatVectorProperty(
             name="Width",
             default=[
                 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05,
@@ -2097,7 +2031,7 @@ class archipack_stair(ArchipackObject, Manipulable, DimensionProvider, PropertyG
             unit='LENGTH',
             update=update
             )
-    rail_z = FloatVectorProperty(
+    rail_z : FloatVectorProperty(
             name="Height",
             default=[
                 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05,
@@ -2111,7 +2045,7 @@ class archipack_stair(ArchipackObject, Manipulable, DimensionProvider, PropertyG
             unit='LENGTH',
             update=update
             )
-    rail_offset = FloatVectorProperty(
+    rail_offset : FloatVectorProperty(
             name="Offset",
             default=[
                 0, 0, 0, 0, 0, 0, 0, 0,
@@ -2124,7 +2058,7 @@ class archipack_stair(ArchipackObject, Manipulable, DimensionProvider, PropertyG
             unit='LENGTH',
             update=update
             )
-    rail_alt = FloatVectorProperty(
+    rail_alt : FloatVectorProperty(
             name="Altitude",
             default=[
                 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
@@ -2137,47 +2071,47 @@ class archipack_stair(ArchipackObject, Manipulable, DimensionProvider, PropertyG
             unit='LENGTH',
             update=update
             )
-    rail_mat = CollectionProperty(type=archipack_stair_material)
+    rail_mat : CollectionProperty(type=archipack_stair_material)
 
-    left_handrail = BoolProperty(
+    left_handrail : BoolProperty(
             name="left",
             update=update,
             default=True
             )
-    right_handrail = BoolProperty(
+    right_handrail : BoolProperty(
             name="right",
             update=update,
             default=True
             )
-    handrail_offset = FloatProperty(
+    handrail_offset : FloatProperty(
             name="Offset",
             default=0.0, precision=2, step=1,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    handrail_alt = FloatProperty(
+    handrail_alt : FloatProperty(
             name="Altitude",
             default=1.0, precision=2, step=1,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    handrail_extend = FloatProperty(
+    handrail_extend : FloatProperty(
             name="Extend",
             default=0.1, precision=2, step=1,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    handrail_slice_left = BoolProperty(
+    handrail_slice_left : BoolProperty(
             name='Slice',
             default=True,
             update=update
             )
-    handrail_slice_right = BoolProperty(
+    handrail_slice_right : BoolProperty(
             name='Slice',
             default=True,
             update=update
             )
-    handrail_profil = EnumProperty(
+    handrail_profil : EnumProperty(
             name="Profil",
             items=(
                 ('SQUARE', 'Square', '', 0),
@@ -2187,21 +2121,21 @@ class archipack_stair(ArchipackObject, Manipulable, DimensionProvider, PropertyG
             default='SQUARE',
             update=update
             )
-    handrail_x = FloatProperty(
+    handrail_x : FloatProperty(
             name="Width",
             min=0.001,
             default=0.04, precision=2, step=1,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    handrail_y = FloatProperty(
+    handrail_y : FloatProperty(
             name="Height",
             min=0.001,
             default=0.04, precision=2, step=1,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    handrail_radius = FloatProperty(
+    handrail_radius : FloatProperty(
             name="Radius",
             min=0.001,
             default=0.02, precision=2, step=1,
@@ -2209,85 +2143,85 @@ class archipack_stair(ArchipackObject, Manipulable, DimensionProvider, PropertyG
             update=update
             )
 
-    left_string = BoolProperty(
+    left_string : BoolProperty(
             name="left",
             update=update,
             default=False
             )
-    right_string = BoolProperty(
+    right_string : BoolProperty(
             name="right",
             update=update,
             default=False
             )
-    string_x = FloatProperty(
+    string_x : FloatProperty(
             name="Width",
             min=-100.0,
             default=0.02, precision=2, step=1,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    string_z = FloatProperty(
+    string_z : FloatProperty(
             name="Height",
             default=0.3, precision=2, step=1,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    string_offset = FloatProperty(
+    string_offset : FloatProperty(
             name="Offset",
             default=0.0, precision=2, step=1,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
-    string_alt = FloatProperty(
+    string_alt : FloatProperty(
             name="Altitude",
             default=-0.04, precision=2, step=1,
             unit='LENGTH', subtype='DISTANCE',
             update=update
             )
 
-    idmat_bottom = EnumProperty(
+    idmat_bottom : EnumProperty(
             name="Bottom",
             items=materials_enum,
             default='1',
             update=update
             )
-    idmat_raise = EnumProperty(
+    idmat_raise : EnumProperty(
             name="Raise",
             items=materials_enum,
             default='1',
             update=update
             )
-    idmat_step_front = EnumProperty(
+    idmat_step_front : EnumProperty(
             name="Step front",
             items=materials_enum,
             default='3',
             update=update
             )
-    idmat_top = EnumProperty(
+    idmat_top : EnumProperty(
             name="Top",
             items=materials_enum,
             default='3',
             update=update
             )
-    idmat_side = EnumProperty(
+    idmat_side : EnumProperty(
             name="Side",
             items=materials_enum,
             default='1',
             update=update
             )
-    idmat_step_side = EnumProperty(
+    idmat_step_side : EnumProperty(
             name="Step Side",
             items=materials_enum,
             default='3',
             update=update
             )
-    idmat_handrail = EnumProperty(
+    idmat_handrail : EnumProperty(
             name="Handrail",
             items=materials_enum,
             default='3',
             update=update
             )
-    idmat_string = EnumProperty(
+    idmat_string : EnumProperty(
             name="String",
             items=materials_enum,
             default='3',
@@ -2295,44 +2229,35 @@ class archipack_stair(ArchipackObject, Manipulable, DimensionProvider, PropertyG
             )
 
     # UI layout related
-    parts_expand = BoolProperty(
-            options={'SKIP_SAVE'},
+    parts_expand : BoolProperty(
             default=False
             )
-    steps_expand = BoolProperty(
-            options={'SKIP_SAVE'},
+    steps_expand : BoolProperty(
             default=False
             )
-    rail_expand = BoolProperty(
-            options={'SKIP_SAVE'},
+    rail_expand : BoolProperty(
             default=False
             )
-    idmats_expand = BoolProperty(
-            options={'SKIP_SAVE'},
+    idmats_expand : BoolProperty(
             default=False
             )
-    handrail_expand = BoolProperty(
-            options={'SKIP_SAVE'},
+    handrail_expand : BoolProperty(
             default=False
             )
-    string_expand = BoolProperty(
-            options={'SKIP_SAVE'},
+    string_expand : BoolProperty(
             default=False
             )
-    post_expand = BoolProperty(
-            options={'SKIP_SAVE'},
+    post_expand : BoolProperty(
             default=False
             )
-    panel_expand = BoolProperty(
-            options={'SKIP_SAVE'},
+    panel_expand : BoolProperty(
             default=False
             )
-    subs_expand = BoolProperty(
-            options={'SKIP_SAVE'},
+    subs_expand : BoolProperty(
             default=False
             )
 
-    auto_update = BoolProperty(
+    auto_update : BoolProperty(
             options={'SKIP_SAVE'},
             default=True,
             update=update_manipulators
@@ -2372,12 +2297,7 @@ class archipack_stair(ArchipackObject, Manipulable, DimensionProvider, PropertyG
         # add parts
         for i in range(len(self.parts), self.n_parts):
             self.parts.add()
-        
-        # rebuild measure points
-        self.dimension_points.clear()
-        for i, p in enumerate(self.parts):
-            p.uid = 6 * i
-        
+
         self.setup_manipulators()
 
     def update(self, context, manipulable_refresh=False):
@@ -2413,7 +2333,7 @@ class archipack_stair(ArchipackObject, Manipulable, DimensionProvider, PropertyG
         self.manipulators[0].set_pts([(-width_left, 0, 0), (width_right, 0, 0), (1, 0, 0)])
         self.manipulators[1].set_pts([(0, 0, 0), (0, 0, self.height), (1, 0, 0)])
 
-        g = StairGenerator(self)
+        g = StairGenerator(self.parts)
         if self.presets == 'STAIR_USER':
             for part in self.parts:
                 g.add_part(part.type, self.steps_type, self.nose_type, self.z_mode, self.nose_z,
@@ -2469,7 +2389,7 @@ class archipack_stair(ArchipackObject, Manipulable, DimensionProvider, PropertyG
 
         if self.user_defined_post_enable:
             # user defined posts
-            user_def_post = context.scene.objects.get(self.user_defined_post)
+            user_def_post = context.scene.objects.get(self.user_defined_post.strip())
             if user_def_post is not None and user_def_post.type == 'MESH':
                 g.setup_user_defined_post(user_def_post, self.post_x, self.post_y, self.post_z)
 
@@ -2488,7 +2408,7 @@ class archipack_stair(ArchipackObject, Manipulable, DimensionProvider, PropertyG
 
         # user defined subs
         if self.user_defined_subs_enable:
-            user_def_subs = context.scene.objects.get(self.user_defined_subs)
+            user_def_subs = context.scene.objects.get(self.user_defined_subs.strip())
             if user_def_subs is not None and user_def_subs.type == 'MESH':
                 g.setup_user_defined_post(user_def_subs, self.subs_x, self.subs_y, self.subs_z)
 
@@ -2576,165 +2496,12 @@ class archipack_stair(ArchipackObject, Manipulable, DimensionProvider, PropertyG
                 self.string_alt, 0, verts, faces, matids, uvs)
 
         bmed.buildmesh(context, o, verts, faces, matids=matids, uvs=uvs, weld=True, clean=True)
-        
-        self.update_dimensions(context, o)
-        
+
         # enable manipulators rebuild
         if manipulable_refresh:
             self.manipulable_refresh = True
 
         self.restore_context(context)
-
-    def as_geom(self, context, o, mode='SAMBOL', min_space=0, io=None):
-        """
-         Return 2d symbol as pygeos geometry for further processing
-         use given io coordsys when apply
-        """
-        self.update_parts()
-
-        center = Vector((0, 0))
-        verts = []
-        faces = []
-
-        # depth at bottom
-        bottom_z = 0
-        width_left = 0.5 * self.width - self.x_offset
-        width_right = 0.5 * self.width + self.x_offset
-        steps_type = 'OPEN'
-        g = StairGenerator(self)
-        if self.presets == 'STAIR_USER':
-            for part in self.parts:
-                g.add_part(part.type, steps_type, self.nose_type, '2D', self.nose_z,
-                        bottom_z, center, max(width_left + 0.01, width_right + 0.01, part.radius), part.da,
-                        width_left, width_right, part.length, part.left_shape, part.right_shape)
-
-        elif self.presets == 'STAIR_O':
-            n_parts = max(1, int(round(abs(self.total_angle) / pi, 0)))
-            if self.total_angle > 0:
-                dir = 1
-            else:
-                dir = -1
-            last_da = self.total_angle - dir * (n_parts - 1) * pi
-            if dir * last_da > pi:
-                n_parts += 1
-                last_da -= dir * pi
-            abs_last = dir * last_da
-
-            for part in range(n_parts - 1):
-                g.add_part('D_STAIR', steps_type, self.nose_type, '2D', self.nose_z,
-                            bottom_z, center, max(width_left + 0.01, width_right + 0.01, self.radius), dir * pi,
-                            width_left, width_right, 1.0, self.left_shape, self.right_shape)
-            if round(abs_last, 2) > 0:
-                if abs_last > pi / 2:
-                    g.add_part('C_STAIR', steps_type, self.nose_type, '2D', self.nose_z,
-                            bottom_z, center, max(width_left + 0.01, width_right + 0.01, self.radius),
-                            dir * pi / 2,
-                            width_left, width_right, 1.0, self.left_shape, self.right_shape)
-                    g.add_part('C_STAIR', steps_type, self.nose_type, '2D', self.nose_z,
-                            bottom_z, center, max(width_left + 0.01, width_right + 0.01, self.radius),
-                            last_da - dir * pi / 2,
-                            width_left, width_right, 1.0, self.left_shape, self.right_shape)
-                else:
-                    g.add_part('C_STAIR', steps_type, self.nose_type, '2D', self.nose_z,
-                            bottom_z, center, max(width_left + 0.01, width_right + 0.01, self.radius), last_da,
-                            width_left, width_right, 1.0, self.left_shape, self.right_shape)
-        else:
-            # STAIR_L STAIR_I STAIR_U
-            for part in self.parts:
-                g.add_part(part.type, steps_type, self.nose_type, '2D', self.nose_z,
-                            bottom_z, center, max(width_left + 0.01, width_right + 0.01, self.radius), self.da,
-                            width_left, width_right, part.length, self.left_shape, self.right_shape)
-
-        # Stair basis
-        id_materials = [int(self.idmat_top), int(self.idmat_step_front), int(self.idmat_raise),
-                        int(self.idmat_side), int(self.idmat_bottom), int(self.idmat_step_side)]
-        g.set_matids(id_materials)
-        g.make_stair(self.height, self.step_depth, verts, faces, [], [], nose_y=self.nose_y)
-        stair = g.stairs[-1]
-        stair.make_step(stair.n_step, verts, faces, [], [], nose_y=self.nose_y)
-        n_verts = len(verts)
-
-        # Create hole from boundary
-        start = 0
-        if mode in {'HOLE', 'FENCE'} and min_space > 0:
-            # hole start may depend on min desired space
-            skip_space = max(0, self.height - min_space)
-            start = 0
-            for stair in g.stairs:
-                # skip all steps for this part
-                segs = 2
-                if ('Curved' in type(stair).__name__ and
-                        (stair.l_shape == 'CIRCLE' or stair.r_shape == 'CIRCLE')):
-                    segs = 2 * max(1, int(abs(stair.da) / pi * 60 / stair.n_step))
-                if skip_space > stair.height:
-                    start += segs * stair.n_step
-                elif skip_space > 0:
-                    start += segs * int(skip_space / stair.step_height)
-                    # skip only a part of this stair
-                skip_space -= stair.height
-        # Boundary
-
-        boundary = []
-        boundary.append(verts[-2])
-        boundary.extend(list(reversed(
-            [verts[i] for i in range(start, n_verts, 2)]
-            )))
-        boundary.extend(
-            [verts[i] for i in range(start + 1, n_verts, 2)]
-            )
-        boundary.append(verts[-1])
-
-        # build lines
-        lines = []
-
-        if io is None:
-            coordsys = Io.getCoordsys([o])
-            io = Io(scene=context.scene, coordsys=coordsys)
-
-        if mode == 'FENCE':
-            geom = io.coords_to_linestring(o.matrix_world, [boundary])
-            geom = geom.simplify(tolerance=0.001, preserve_topology=False)
-        else:
-            geom = io.coords_to_polygon(o.matrix_world, boundary)
-            geom.exterior = geom.exterior.simplify(tolerance=0.001, preserve_topology=False)
-
-        if mode in {'HOLE', 'FENCE'}:
-            # return only hole boundary as geometry
-            return io, geom
-
-        lines.append(geom)
-
-        # Steps
-        coords = [[verts[f], verts[f + 1]] for i, f in enumerate(faces) if i > 0]
-        coords.pop()
-        steps = io.coords_to_linestring(o.matrix_world, coords)
-        lines.append(steps)
-
-        # Axis arrow
-        arrow = coords[-1]
-        coords = []
-        g.make_profile([Vector((0, 0, 0))], 0, "2D", False,
-                    0, self.step_depth, 0,
-                    0, 0, coords, faces, [], [])
-        end = coords.pop()
-        p0, p1 = Vector(end), Vector(coords[-2])
-        c = p0 + (p1 - p0).normalized() * self.step_depth
-        p0, p1 = Vector(arrow[0]), Vector(arrow[1])
-        v = (p1 - p0).normalized() * 0.25 * self.step_depth
-        arrow = [c - v, end, c + v]
-
-        # Axis start symbol
-        p0, p1, p2 = Vector(verts[0]), Vector(verts[1]), Vector(verts[2])
-        c = Vector(coords[0])
-        vx = 0.5 * (p2 - p0)
-        vy = (p1 - p0).normalized() * 0.1 * self.step_depth
-        symbol0 = [c + vx + vy, c - vx + vy]
-        symbol1 = [c + vx - vy, c - vx - vy]
-
-        res = io.coords_to_linestring(o.matrix_world, [coords, arrow, symbol0, symbol1])
-        lines.append(res)
-        geom = lines[0]._factory.buildGeometry(lines)
-        return io, geom
 
     def manipulable_setup(self, context):
         """
@@ -2751,7 +2518,7 @@ class archipack_stair(ArchipackObject, Manipulable, DimensionProvider, PropertyG
 
         self.setup_manipulators()
 
-        if self.presets is not 'STAIR_O':
+        if self.presets != 'STAIR_O':
             for i, part in enumerate(self.parts):
                 if i >= self.n_parts:
                     break
@@ -2772,7 +2539,7 @@ class ARCHIPACK_PT_stair(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     # bl_context = 'object'
-    bl_category = 'ArchiPack'
+    bl_category = 'Archipack'
 
     @classmethod
     def poll(cls, context):
@@ -2785,69 +2552,63 @@ class ARCHIPACK_PT_stair(Panel):
         scene = context.scene
         layout = self.layout
         row = layout.row(align=True)
-        row.operator('archipack.manipulate', icon='HAND')
+        row.operator('archipack.stair_manipulate', icon='VIEW_PAN')
         row = layout.row(align=True)
         row.prop(prop, 'presets', text="")
         box = layout.box()
+        # box.label(text="Styles")
         row = box.row(align=True)
+        # row.menu("ARCHIPACK_MT_stair_preset", text=bpy.types.ARCHIPACK_MT_stair_preset.bl_label)
         row.operator("archipack.stair_preset_menu", text=bpy.types.ARCHIPACK_OT_stair_preset_menu.bl_label)
-        row.operator("archipack.stair_preset", text="", icon='ZOOMIN')
-        row.operator("archipack.stair_preset", text="", icon='ZOOMOUT').remove_active = True
+        row.operator("archipack.stair_preset", text="", icon='ADD')
+        row.operator("archipack.stair_preset", text="", icon='REMOVE').remove_active = True
         box = layout.box()
         box.prop(prop, 'width')
         box.prop(prop, 'height')
         box.prop(prop, 'bottom_z')
         box.prop(prop, 'x_offset')
-        box = layout.box()
-        box.label(text="Create curves")
-        row = box.row(align=True)
-        row.operator("archipack.stair_to_curve", text="Symbol").mode = 'SYMBOL'
-        op = row.operator("archipack.stair_to_curve", text="Fence")
-        op.mode = 'FENCE'
-        op.min_space = prop.height
-        op = row.operator("archipack.stair_to_curve", text="Hole")
-        op.mode = 'HOLE'
-        op.min_space = prop.height
         # box.prop(prop, 'z_mode')
         box = layout.box()
+        row = box.row()
         if prop.parts_expand:
-            box.prop(prop, 'parts_expand', icon="TRIA_DOWN", text="Parts", icon_only=True, emboss=False)
-        else:
-            box.prop(prop, 'parts_expand', icon="TRIA_RIGHT", text="Parts", icon_only=True, emboss=False)
-        if prop.parts_expand:
+            row.prop(prop, 'parts_expand', icon="TRIA_DOWN", text="Parts", emboss=False)
             if prop.presets == 'STAIR_USER':
                 box.prop(prop, 'n_parts')
             if prop.presets != 'STAIR_USER':
                 row = box.row(align=True)
                 row.prop(prop, "left_shape", text="")
                 row.prop(prop, "right_shape", text="")
-                box.prop(prop, "radius")
+                row = box.row()
+                row.prop(prop, "radius")
+                row = box.row()
                 if prop.presets == 'STAIR_O':
-                    box.prop(prop, 'total_angle')
+                    row.prop(prop, 'total_angle')
                 else:
-                    box.prop(prop, 'da')
+                    row.prop(prop, 'da')
             if prop.presets != 'STAIR_O':
                 for i, part in enumerate(prop.parts):
                     part.draw(layout, context, i, prop.presets == 'STAIR_USER')
+        else:
+            row.prop(prop, 'parts_expand', icon="TRIA_RIGHT", text="Parts", emboss=False)
 
         box = layout.box()
         row = box.row()
         if prop.steps_expand:
-            row.prop(prop, 'steps_expand', icon="TRIA_DOWN", icon_only=True, text="Steps", emboss=False)
+            row.prop(prop, 'steps_expand', icon="TRIA_DOWN", text="Steps", emboss=False)
             box.prop(prop, 'steps_type')
             box.prop(prop, 'step_depth')
             box.prop(prop, 'nose_type')
             box.prop(prop, 'nose_z')
             box.prop(prop, 'nose_y')
         else:
-            row.prop(prop, 'steps_expand', icon="TRIA_RIGHT", icon_only=True, text="Steps", emboss=False)
+            row.prop(prop, 'steps_expand', icon="TRIA_RIGHT", text="Steps", emboss=False)
 
         box = layout.box()
         row = box.row(align=True)
         if prop.handrail_expand:
-            row.prop(prop, 'handrail_expand', icon="TRIA_DOWN", icon_only=True, text="Handrail", emboss=False)
+            row.prop(prop, 'handrail_expand', icon="TRIA_DOWN", text="Handrail", emboss=False)
         else:
-            row.prop(prop, 'handrail_expand', icon="TRIA_RIGHT", icon_only=True, text="Handrail", emboss=False)
+            row.prop(prop, 'handrail_expand', icon="TRIA_RIGHT", text="Handrail", emboss=False)
 
         row.prop(prop, 'left_handrail')
         row.prop(prop, 'right_handrail')
@@ -2869,9 +2630,9 @@ class ARCHIPACK_PT_stair(Panel):
         box = layout.box()
         row = box.row(align=True)
         if prop.string_expand:
-            row.prop(prop, 'string_expand', icon="TRIA_DOWN", icon_only=True, text="String", emboss=False)
+            row.prop(prop, 'string_expand', icon="TRIA_DOWN", text="String", emboss=False)
         else:
-            row.prop(prop, 'string_expand', icon="TRIA_RIGHT", icon_only=True, text="String", emboss=False)
+            row.prop(prop, 'string_expand', icon="TRIA_RIGHT", text="String", emboss=False)
         row.prop(prop, 'left_string')
         row.prop(prop, 'right_string')
         if prop.string_expand:
@@ -2883,9 +2644,9 @@ class ARCHIPACK_PT_stair(Panel):
         box = layout.box()
         row = box.row(align=True)
         if prop.post_expand:
-            row.prop(prop, 'post_expand', icon="TRIA_DOWN", icon_only=True, text="Post", emboss=False)
+            row.prop(prop, 'post_expand', icon="TRIA_DOWN", text="Post", emboss=False)
         else:
-            row.prop(prop, 'post_expand', icon="TRIA_RIGHT", icon_only=True, text="Post", emboss=False)
+            row.prop(prop, 'post_expand', icon="TRIA_RIGHT", text="Post", emboss=False)
         row.prop(prop, 'left_post')
         row.prop(prop, 'right_post')
         if prop.post_expand:
@@ -2904,9 +2665,9 @@ class ARCHIPACK_PT_stair(Panel):
         box = layout.box()
         row = box.row(align=True)
         if prop.subs_expand:
-            row.prop(prop, 'subs_expand', icon="TRIA_DOWN", icon_only=True, text="Subs", emboss=False)
+            row.prop(prop, 'subs_expand', icon="TRIA_DOWN", text="Subs", emboss=False)
         else:
-            row.prop(prop, 'subs_expand', icon="TRIA_RIGHT", icon_only=True, text="Subs", emboss=False)
+            row.prop(prop, 'subs_expand', icon="TRIA_RIGHT", text="Subs", emboss=False)
 
         row.prop(prop, 'left_subs')
         row.prop(prop, 'right_subs')
@@ -2925,9 +2686,9 @@ class ARCHIPACK_PT_stair(Panel):
         box = layout.box()
         row = box.row(align=True)
         if prop.panel_expand:
-            row.prop(prop, 'panel_expand', icon="TRIA_DOWN", icon_only=True, text="Panels", emboss=False)
+            row.prop(prop, 'panel_expand', icon="TRIA_DOWN", text="Panels", emboss=False)
         else:
-            row.prop(prop, 'panel_expand', icon="TRIA_RIGHT", icon_only=True, text="Panels", emboss=False)
+            row.prop(prop, 'panel_expand', icon="TRIA_RIGHT", text="Panels", emboss=False)
         row.prop(prop, 'left_panel')
         row.prop(prop, 'right_panel')
         if prop.panel_expand:
@@ -2940,9 +2701,9 @@ class ARCHIPACK_PT_stair(Panel):
         box = layout.box()
         row = box.row(align=True)
         if prop.rail_expand:
-            row.prop(prop, 'rail_expand', icon="TRIA_DOWN", icon_only=True, text="Rails", emboss=False)
+            row.prop(prop, 'rail_expand', icon="TRIA_DOWN", text="Rails", emboss=False)
         else:
-            row.prop(prop, 'rail_expand', icon="TRIA_RIGHT", icon_only=True, text="Rails", emboss=False)
+            row.prop(prop, 'rail_expand', icon="TRIA_RIGHT", text="Rails", emboss=False)
         row.prop(prop, 'left_rail')
         row.prop(prop, 'right_rail')
         if prop.rail_expand:
@@ -2960,7 +2721,7 @@ class ARCHIPACK_PT_stair(Panel):
         row = box.row()
 
         if prop.idmats_expand:
-            row.prop(prop, 'idmats_expand', icon="TRIA_DOWN", icon_only=True, text="Materials", emboss=False)
+            row.prop(prop, 'idmats_expand', icon="TRIA_DOWN", text="Materials", emboss=False)
             box.prop(prop, 'idmat_top')
             box.prop(prop, 'idmat_side')
             box.prop(prop, 'idmat_bottom')
@@ -2973,7 +2734,7 @@ class ARCHIPACK_PT_stair(Panel):
             box.prop(prop, 'idmat_subs')
             box.prop(prop, 'idmat_string')
         else:
-            row.prop(prop, 'idmats_expand', icon="TRIA_RIGHT", icon_only=True, text="Materials", emboss=False)
+            row.prop(prop, 'idmats_expand', icon="TRIA_RIGHT", text="Materials", emboss=False)
 
 
 # ------------------------------------------------------------------
@@ -2992,9 +2753,9 @@ class ARCHIPACK_OT_stair(ArchipackCreateTool, Operator):
         m = bpy.data.meshes.new("Stair")
         o = bpy.data.objects.new("Stair", m)
         d = m.archipack_stair.add()
-        context.scene.objects.link(o)
-        o.select = True
-        context.scene.objects.active = o
+        self.link_object_to_scene(context, o)
+        o.select_set(state=True)
+        context.view_layer.objects.active = o
         self.load_preset(d)
         self.add_material(o)
         m.auto_smooth_angle = 0.20944
@@ -3007,60 +2768,34 @@ class ARCHIPACK_OT_stair(ArchipackCreateTool, Operator):
         if context.mode == "OBJECT":
             bpy.ops.object.select_all(action="DESELECT")
             o = self.create(context)
-            o.location = context.scene.cursor_location
-            o.select = True
-            context.scene.objects.active = o
+            o.location = context.scene.cursor.location
+            o.select_set(state=True)
+            context.view_layer.objects.active = o
             self.manipulate()
             return {'FINISHED'}
         else:
             self.report({'WARNING'}, "Archipack: Option only valid in Object mode")
             return {'CANCELLED'}
 
+# ------------------------------------------------------------------
+# Define operator class to manipulate object
+# ------------------------------------------------------------------
 
-class ARCHIPACK_OT_stair_to_curve(Operator):
-    bl_idname = "archipack.stair_to_curve"
-    bl_label = "To curve"
-    bl_description = "Create curve from stair"
-    bl_category = 'Archipack'
+
+class ARCHIPACK_OT_stair_manipulate(Operator):
+    bl_idname = "archipack.stair_manipulate"
+    bl_label = "Manipulate"
+    bl_description = "Manipulate"
     bl_options = {'REGISTER', 'UNDO'}
-    mode = EnumProperty(
-        items=(
-            ('HOLE', 'Hole', 'Hole'),
-            ('FENCE', 'Fence', 'Fence'),
-            ('SYMBOL', 'Symbol', 'Symbol')
-        ),
-        default='HOLE'
-        )
-    min_space = FloatProperty(
-        name="Min space",
-        description="Minimum available space from steps",
-        precision=2, step=1, default=270,
-        unit='LENGTH', subtype='DISTANCE'
-        )
 
-    def draw(self, context):
-        layout = self.layout
-        layout.prop(self, 'mode')
-        if self.mode in {'FENCE', 'HOLE'}:
-            layout.prop(self, 'min_space')
+    @classmethod
+    def poll(self, context):
+        return archipack_stair.filter(context.active_object)
 
-    def execute(self, context):
-        if context.mode == "OBJECT":
-            o = context.active_object
-            d = archipack_stair.datablock(o)
-            if d is None:
-                return {'CANCELLED'}
-            io, geom = d.as_geom(context, o, mode=self.mode, min_space=self.min_space)
-            bpy.ops.object.select_all(action="DESELECT")
-            res = io._to_curve(geom, "{}-{}".format(o.name, self.mode.lower()), '3D')
-            if self.mode in {'FENCE', 'HOLE'}:
-                res.location.z = d.height
-            res.select = True
-            context.scene.objects.active = res
-            return {'FINISHED'}
-        else:
-            self.report({'WARNING'}, "Archipack: Option only valid in Object mode")
-            return {'CANCELLED'}
+    def invoke(self, context, event):
+        d = archipack_stair.datablock(context.active_object)
+        d.manipulable_invoke(context)
+        return {'FINISHED'}
 
 
 # ------------------------------------------------------------------
@@ -3093,9 +2828,9 @@ def register():
     Mesh.archipack_stair = CollectionProperty(type=archipack_stair)
     bpy.utils.register_class(ARCHIPACK_PT_stair)
     bpy.utils.register_class(ARCHIPACK_OT_stair)
-    bpy.utils.register_class(ARCHIPACK_OT_stair_to_curve)
     bpy.utils.register_class(ARCHIPACK_OT_stair_preset_menu)
     bpy.utils.register_class(ARCHIPACK_OT_stair_preset)
+    bpy.utils.register_class(ARCHIPACK_OT_stair_manipulate)
 
 
 def unregister():
@@ -3105,6 +2840,6 @@ def unregister():
     del Mesh.archipack_stair
     bpy.utils.unregister_class(ARCHIPACK_PT_stair)
     bpy.utils.unregister_class(ARCHIPACK_OT_stair)
-    bpy.utils.unregister_class(ARCHIPACK_OT_stair_to_curve)
     bpy.utils.unregister_class(ARCHIPACK_OT_stair_preset_menu)
     bpy.utils.unregister_class(ARCHIPACK_OT_stair_preset)
+    bpy.utils.unregister_class(ARCHIPACK_OT_stair_manipulate)

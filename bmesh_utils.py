@@ -34,8 +34,8 @@ class BmeshEdit():
         """
             private, start bmesh editing of active object
         """
-        o.select = True
-        context.scene.objects.active = o
+        o.select_set(state=True)
+        context.view_layer.objects.active = o
         bpy.ops.object.mode_set(mode='EDIT')
         bm = bmesh.from_edit_mesh(o.data)
         bm.verts.ensure_lookup_table()
@@ -49,13 +49,14 @@ class BmeshEdit():
             allows an additional 'normal_update=True' to force _normal_ calculations.
         """
         bm = BmeshEdit._start(context, o)
-        
+
         add_vert = bm.verts.new
         add_face = bm.faces.new
         add_edge = bm.edges.new
 
         for bm_to_add in list_of_bmeshes:
             offset = len(bm.verts)
+
             for v in bm_to_add.verts:
                 add_vert(v.co)
 
@@ -90,14 +91,14 @@ class BmeshEdit():
             bm.normal_update()
 
         BmeshEdit._end(bm, o)
-    
+
     @staticmethod
     def _end(bm, o):
         """
             private, end bmesh editing of active object
         """
         bm.normal_update()
-        bmesh.update_edit_mesh(o.data, True)
+        bmesh.update_edit_mesh(o.data, loop_triangles=True)
         bpy.ops.object.mode_set(mode='OBJECT')
         bm.free()
 
@@ -128,20 +129,13 @@ class BmeshEdit():
     def buildmesh(context, o, verts, faces,
             matids=None, uvs=None, weld=False,
             clean=False, auto_smooth=True, temporary=False):
-        
-        if o is not None:
-            # ensure object is visible 
-            # otherwhise it is not editable
-            vis_state = o.hide
-            o.hide = False
-        
+
         if temporary:
             bm = bmesh.new()
         else:
             bm = BmeshEdit._start(context, o)
             bm.clear()
-            
-        
+
         for v in verts:
             bm.verts.new(v)
         bm.verts.index_update()
@@ -174,10 +168,7 @@ class BmeshEdit():
         if clean:
             bpy.ops.mesh.delete_loose()
         bpy.ops.object.mode_set(mode='OBJECT')
-        
-        if o is not None:
-            o.hide = vis_state
-               
+
     @staticmethod
     def addmesh(context, o, verts, faces, matids=None, uvs=None, weld=False, clean=False, auto_smooth=True):
         bm = BmeshEdit._start(context, o)
@@ -221,10 +212,10 @@ class BmeshEdit():
     @staticmethod
     def bevel(context, o,
             offset,
-            offset_type=0,
+            offset_type='OFFSET',
             segments=1,
             profile=0.5,
-            vertex_only=False,
+            # vertex_only=False,
             clamp_overlap=True,
             material=-1,
             use_selection=True):
@@ -253,7 +244,7 @@ class BmeshEdit():
             offset_type=offset_type,
             segments=segments,
             profile=profile,
-            vertex_only=vertex_only,
+            # vertex_only=vertex_only,
             clamp_overlap=clamp_overlap,
             material=material)
 
@@ -267,8 +258,7 @@ class BmeshEdit():
             dist=0.001,
             use_snap_center=False,
             clear_outer=True,
-            clear_inner=False,
-            in_place=True
+            clear_inner=False
             ):
 
         bm = bmesh.new()
@@ -287,12 +277,10 @@ class BmeshEdit():
             clear_outer=clear_outer,
             clear_inner=clear_inner
             )
-        if in_place:
-            bm.to_mesh(o.data)
-            bm.free()
-            bm = None
-        return bm
-        
+
+        bm.to_mesh(o.data)
+        bm.free()
+
     @staticmethod
     def solidify(context, o, amt, floor_bottom=False, altitude=0):
         bm = bmesh.new()

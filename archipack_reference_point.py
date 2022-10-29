@@ -30,11 +30,11 @@ from bpy.props import (
     FloatVectorProperty,
     CollectionProperty,
     FloatProperty,
-    EnumProperty,
-    BoolProperty
+    EnumProperty
     )
 from mathutils import Vector
 from .bmesh_utils import BmeshEdit as bmed
+from .archipack_object import ArchipackCollectionManager
 
 
 def update(self, context):
@@ -42,22 +42,22 @@ def update(self, context):
 
 
 class archipack_reference_point(PropertyGroup):
-    location_2d = FloatVectorProperty(
+    location_2d : FloatVectorProperty(
         subtype='XYZ',
         name="position 2d",
         default=Vector((0, 0, 0))
         )
-    location_3d = FloatVectorProperty(
+    location_3d : FloatVectorProperty(
         subtype='XYZ',
         name="position 3d",
         default=Vector((0, 0, 0))
         )
-    symbol_scale = FloatProperty(
+    symbol_scale : FloatProperty(
         name="Screen scale",
         default=1,
         min=0.01,
         update=update)
-    symbol_type = EnumProperty(
+    symbol_type : EnumProperty(
         name="Symbol type",
         default='WALL',
         items=(
@@ -71,7 +71,7 @@ class archipack_reference_point(PropertyGroup):
             Filter object with this class in data
             return
             True when object contains this datablock
-            False otherwhise
+            False otherwise
             usage:
             class_name.filter(object) from outside world
             self.__class__.filter(object) from instance
@@ -115,13 +115,13 @@ class archipack_reference_point(PropertyGroup):
                 (0.0, 0.0, 0.487), (-0.107, 0.107, 0.216), (0.108, 0.107, 0.216), (-0.107, -0.107, 0.216),
                 (0.108, -0.107, 0.216), (-0.05, 0.05, 0.5), (0.05, 0.05, 0.5), (0.05, -0.05, 0.5),
                 (-0.05, -0.05, 0.5), (-0.193, 0.193, 0.0), (0.193, 0.193, 0.0), (0.193, -0.193, 0.0),
-                (-0.193, -0.193, 0.0), (0.0, 0.0, 0.8), (0.0, 0.8, 0.0), (0.0, 0.0, 0.0),
-                (0.0, 0.0, 0.0), (0.05, 0.05, 0.674), (-0.05, 0.674, 0), (0.0, 0.8, 0.0),
-                (-0.05, -0.05, 0.674), (-0.05, 0.674, 0.05), (0.05, 0.674, 0), (-0.129, 0.129, 0.162),
+                (-0.193, -0.193, 0.0), (0.0, 0.0, 0.8), (0.0, 0.8, -0.0), (0.0, 0.0, -0.0),
+                (0.0, 0.0, 0.0), (0.05, 0.05, 0.674), (-0.05, 0.674, -0.05), (0.0, 0.8, -0.0),
+                (-0.05, -0.05, 0.674), (-0.05, 0.674, 0.05), (0.05, 0.674, -0.05), (-0.129, 0.129, 0.162),
                 (0.129, 0.129, 0.162), (-0.129, -0.129, 0.162), (0.129, -0.129, 0.162), (0.0, 0.0, 0.8),
-                (-0.05, 0.05, 0.674), (0.05, -0.05, 0.674), (0.05, 0.674, 0.05), (0.8, 0.0, 0.0),
-                (0.0, 0.0, 0.0), (0.674, 0.05, 0), (0.8, 0.0, 0.0), (0.674, 0.05, 0.05),
-                (0.674, -0.05, 0), (0.674, -0.05, 0.05)]]
+                (-0.05, 0.05, 0.674), (0.05, -0.05, 0.674), (0.05, 0.674, 0.05), (0.8, -0.0, -0.0),
+                (0.0, -0.0, -0.0), (0.674, 0.05, -0.05), (0.8, -0.0, -0.0), (0.674, 0.05, 0.05),
+                (0.674, -0.05, -0.05), (0.674, -0.05, 0.05)]]
 
             edges = [(1, 0), (0, 9), (9, 10), (10, 1), (3, 1), (10, 11),
                 (11, 3), (2, 3), (11, 12), (12, 2), (0, 2), (12, 9),
@@ -141,11 +141,11 @@ class archipack_reference_point(PropertyGroup):
                 (0.0, 0.0, 0.487), (-0.107, 0.107, 0.216), (0.108, 0.107, 0.216), (-0.107, -0.107, 0.216),
                 (0.108, -0.107, 0.216), (-0.05, 0.05, 0.5), (0.05, 0.05, 0.5), (0.05, -0.05, 0.5),
                 (-0.05, -0.05, 0.5), (-0.193, 0.193, 0.0), (0.193, 0.193, 0.0), (0.193, -0.193, 0.0),
-                (-0.193, -0.193, 0.0), (0.0, 0.0, 0.8), (0.0, 0.8, 0.0), (0.0, 0.0, 0.0),
-                (0.05, 0.05, 0.673), (-0.05, 0.674, 0.0), (-0.05, -0.05, 0.673), (-0.05, 0.674, 0.05),
-                (0.05, 0.674, 0.0), (-0.129, 0.129, 0.162), (0.129, 0.129, 0.162), (-0.129, -0.129, 0.162),
+                (-0.193, -0.193, 0.0), (0.0, 0.0, 0.8), (0.0, 0.8, -0.0), (0.0, 0.0, 0.0),
+                (0.05, 0.05, 0.673), (-0.05, 0.674, -0.05), (-0.05, -0.05, 0.673), (-0.05, 0.674, 0.05),
+                (0.05, 0.674, -0.05), (-0.129, 0.129, 0.162), (0.129, 0.129, 0.162), (-0.129, -0.129, 0.162),
                 (0.129, -0.129, 0.162), (-0.05, 0.05, 0.673), (0.05, -0.05, 0.673), (0.05, 0.674, 0.05),
-                (0.8, 0.0, 0.0), (0.674, 0.05, 0.0), (0.674, 0.05, 0.05), (0.674, -0.05, 0.0),
+                (0.8, -0.0, -0.0), (0.674, 0.05, -0.05), (0.674, 0.05, 0.05), (0.674, -0.05, -0.05),
                 (0.674, -0.05, 0.05), (0.108, 0.0, 0.216), (0.09, 0.0, 0.261), (0.001, 0.107, 0.216),
                 (0.001, -0.107, 0.216), (-0.107, 0.0, 0.216), (0.0, -0.089, 0.261), (0.0, 0.089, 0.261),
                 (-0.089, 0.0, 0.261), (0.0, 0.042, 0.694), (-0.042, 0.0, 0.694), (0.0, -0.042, 0.694),
@@ -178,7 +178,7 @@ class ARCHIPACK_PT_reference_point(Panel):
     bl_label = "Reference point"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = 'ArchiPack'
+    bl_category = 'Archipack'
 
     @classmethod
     def poll(cls, context):
@@ -196,21 +196,23 @@ class ARCHIPACK_PT_reference_point(Panel):
         else:
             layout.operator('archipack.move_to_2d')
         layout.prop(props, 'symbol_scale')
+        layout.separator()
+        layout.operator('archipack.apply_holes')
 
 
-class ARCHIPACK_OT_reference_point(Operator):
+class ARCHIPACK_OT_reference_point(ArchipackCollectionManager, Operator):
     """Add reference point"""
     bl_idname = "archipack.reference_point"
     bl_label = "Reference point"
     bl_description = "Add reference point"
     bl_category = 'Archipack'
     bl_options = {'REGISTER', 'UNDO'}
-    location_3d = FloatVectorProperty(
+    location_3d : FloatVectorProperty(
         subtype='XYZ',
         name="position 3d",
         default=Vector((0, 0, 0))
         )
-    symbol_type = EnumProperty(
+    symbol_type : EnumProperty(
         name="Symbol type",
         default='WALL',
         items=(
@@ -225,29 +227,29 @@ class ARCHIPACK_OT_reference_point(Operator):
     def draw(self, context):
         layout = self.layout
         row = layout.row()
-        row.label("Use Properties panel (N) to define parms", icon='INFO')
+        row.label(text="Use Properties panel (N) to define parms", icon='INFO')
 
     def create(self, context):
-        x, y, z = context.scene.cursor_location
+        x, y, z = context.scene.cursor.location
         # bpy.ops.object.empty_add(type='ARROWS', radius=0.5, location=Vector((x, y, 0)))
         m = bpy.data.meshes.new(name="Reference")
         o = bpy.data.objects.new("Reference", m)
         o.location = Vector((x, y, 0))
-        context.scene.objects.link(o)
+        self.link_object_to_scene(context, o)
         d = o.archipack_reference_point.add()
         d.location_2d = Vector((x, y, 0))
         d.location_3d = self.location_3d
         d.symbol_type = self.symbol_type
-        o.select = True
-        context.scene.objects.active = o
+        o.select_set(state=True)
+        context.view_layer.objects.active = o
         d.update(context)
         return o
 
     def execute(self, context):
         if context.mode == "OBJECT":
             o = self.create(context)
-            o.select = True
-            context.scene.objects.active = o
+            o.select_set(state=True)
+            context.view_layer.objects.active = o
             return {'FINISHED'}
         else:
             self.report({'WARNING'}, "Archipack: Option only valid in Object mode")
@@ -278,60 +280,66 @@ class ARCHIPACK_OT_move_to_3d(Operator):
             return {'CANCELLED'}
 
 
-class ARCHIPACK_OT_kill_archipack(Operator):
-    bl_idname = "archipack.kill_archipack"
-    bl_label = "Do you realy want to kill archipack parameters ?"
-    bl_description = "Kill archipack parameters, objects will no more be editable via parameters"
+class ARCHIPACK_OT_apply_holes(Operator):
+    bl_idname = "archipack.apply_holes"
+    bl_label = "Apply holes"
+    bl_description = "Apply and remove holes from scene"
     bl_category = 'Archipack'
     bl_options = {'REGISTER', 'UNDO'}
-    selected_only = BoolProperty(default=False)
 
     @classmethod
     def poll(cls, context):
-        return context.mode == "OBJECT"
+        return archipack_reference_point.filter(context.active_object)
 
-    def apply(self, context, objects):
+    def apply_boolean(self, context, o):
+        # mods = [m for m in o.modifiers if m.type == 'BOOLEAN']
+        ctx = bpy.context.copy()
+        ctx['object'] = o
+        for mod in o.modifiers[:]:
+            ctx['modifier'] = mod
+            try:
+                bpy.ops.object.modifier_apply(ctx, modifier=mod.name)
+            except:
+                pass
 
-        for o in objects:
-        
-            keys = o.keys()
-            for key in keys:
-                if "archipack_" in key:
-                    try:
-                        # will fail for holes
-                        o.property_unset(key)
-                    except:
-                        pass
-                    try:
-                        del o[key]
-                    except:
-                        pass
-                        
-            if o.data is not None:
-                keys = o.data.keys()
-                for key in keys:
-                    if "archipack_" in key:
-                        o.data.property_unset(key)
-    
-    def invoke(self, context, event):
-        return context.window_manager.invoke_confirm(self, event)
-    
     def execute(self, context):
         if context.mode == "OBJECT":
+            o = context.active_object
+            to_remove = []
 
-            if self.selected_only:
-                objects = context.selected_objects[:]
-            else:
-                objects = context.scene.objects[:]
+            for c in o.children:
+                if 'archipack_hybridhole' in c:
+                    self.apply_boolean(context, c)
+                    to_remove.append(c)
 
-            self.apply(context, objects)
+            for c in o.children:
+                if c.data is not None and "archipack_wall2" in c.data:
+                    self.apply_boolean(context, c)
+
+            for c in o.children:
+                if c.data is not None and (
+                        "archipack_window" in c.data or
+                        "archipack_door" in c.data):
+                    for h in c.children:
+                        if "archipack_hole" in h:
+                            to_remove.append(h)
+
+            bpy.ops.object.select_all(action="DESELECT")
+            for r in to_remove:
+                r.hide_select = False
+                r.select_set(state=True)
+                context.view_layer.objects.active = r
+            bpy.ops.object.delete(use_global=False)
+
+            o.select_set(state=True)
+            context.view_layer.objects.active = o
 
             return {'FINISHED'}
         else:
             self.report({'WARNING'}, "Archipack: Option only valid in Object mode")
             return {'CANCELLED'}
-            
-            
+
+
 class ARCHIPACK_OT_move_to_2d(Operator):
     bl_idname = "archipack.move_to_2d"
     bl_label = "Move to 2d"
@@ -402,9 +410,9 @@ class ARCHIPACK_OT_move_2d_reference_to_cursor(Operator):
             bpy.ops.object.select_all(action="DESELECT")
             bpy.ops.archipack.reference_point(location_3d=props.location_3d)
             for child in o.children:
-                child.select = True
+                child.select_set(state=True)
             bpy.ops.archipack.parent_to_reference()
-            context.scene.objects.unlink(o)
+            self.unlink_object_from_scene(o)
             return {'FINISHED'}
         else:
             self.report({'WARNING'}, "Archipack: Option only valid in Object mode")
@@ -433,7 +441,7 @@ class ARCHIPACK_OT_parent_to_reference(Operator):
             # print("parent_to_reference parenting:%s objects" % (len(sel)))
             for child in sel:
                 rs = child.matrix_world.to_3x3().to_4x4()
-                loc = itM * child.matrix_world.translation
+                loc = itM @ child.matrix_world.translation
                 child.parent = None
                 child.matrix_parent_inverse.identity()
                 child.location = Vector((0, 0, 0))
@@ -456,7 +464,7 @@ def register():
     bpy.utils.register_class(ARCHIPACK_OT_store_2d_reference)
     bpy.utils.register_class(ARCHIPACK_OT_move_2d_reference_to_cursor)
     bpy.utils.register_class(ARCHIPACK_OT_parent_to_reference)
-    bpy.utils.register_class(ARCHIPACK_OT_kill_archipack)
+    bpy.utils.register_class(ARCHIPACK_OT_apply_holes)
 
 
 def unregister():
@@ -469,4 +477,4 @@ def unregister():
     bpy.utils.unregister_class(ARCHIPACK_OT_store_2d_reference)
     bpy.utils.unregister_class(ARCHIPACK_OT_move_2d_reference_to_cursor)
     bpy.utils.unregister_class(ARCHIPACK_OT_parent_to_reference)
-    bpy.utils.unregister_class(ARCHIPACK_OT_kill_archipack)
+    bpy.utils.unregister_class(ARCHIPACK_OT_apply_holes)

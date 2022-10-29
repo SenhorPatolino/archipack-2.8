@@ -24,16 +24,19 @@
 # Author: Stephen Leger (s-leger)
 #
 # ----------------------------------------------------------
-import logging
-logger = logging.getLogger("manipulator")
-
 import bpy
 from math import atan2, pi
 from mathutils import Vector, Matrix
 from mathutils.geometry import intersect_line_plane, intersect_point_line, intersect_line_sphere
 from bpy_extras import view3d_utils
 from bpy.types import PropertyGroup, Operator
-from bpy.props import FloatVectorProperty, StringProperty, CollectionProperty, BoolProperty
+from bpy.props import (
+    FloatVectorProperty,
+    StringProperty,
+    CollectionProperty,
+    BoolProperty
+)
+
 from bpy.app.handlers import persistent
 from .archipack_snap import snap_point
 from .archipack_keymaps import Keymaps
@@ -41,7 +44,6 @@ from .archipack_gl import (
     GlLine, GlArc, GlText,
     GlPolyline, GlPolygon,
     TriHandle, SquareHandle, EditableText,
-    CruxHandle, PlusHandle,
     FeedbackPanel, GlCursorArea
 )
 
@@ -52,12 +54,12 @@ from .archipack_gl import (
 # as transform.translate in use to allow snap
 # does catch all events.
 # This however has a wanted side effect:
-# the manipulator take precedence over allready running
+# the manipulator take precedence over already running
 # ones, and prevent select mode to start.
 #
 # TODO:
 # Other manipulators should use same technique to take
-# precedence over allready running ones when active
+# precedence over already running ones when active
 #
 # NOTE:
 # Select mode does suffer from this stack effect:
@@ -71,14 +73,16 @@ from .archipack_gl import (
 # (manips[key].manipulable.manip_stack)
 # Must investigate for a way to handle unselect after drag done.
 
-"""
-    @TODO:
-    Last modal running wins.
-    Manipulateurs without snap and thus not running own modal,
-    may loose events events caught by select mode of last
-    manipulable enabled
-"""
 
+import logging
+logger = logging.getLogger("archipack")
+
+
+"""
+ Change object location when moving 1 point
+ When False, change data.origin instead
+"""
+USE_MOVE_OBJECT = True
 # Arrow sizes (world units)
 arrow_size = 0.05
 # Handle area size (pixels)
@@ -91,13 +95,6 @@ handle_size = 10
 # between many objects being in manipulate mode
 # use object names as loose keys
 # NOTE : use app.drivers to reset before file load
-
-# @TODO:
-# store data path
-# and use this stack to manipulate
-# manipulable objects must update this stack
-# through archipack_manipulator class
-
 manips = {}
 
 
@@ -114,17 +111,25 @@ class ArchipackActiveManip:
         self.stack = []
         # reference to object manipulable instance
         self.manipulable = None
-        self.datablock = None
-        
+
+    def is_snapping(self, ctx):
+        """
+            Check if snap is active
+        """
+        return ctx.active_object and ctx.active_object.name.startswith("Archipack_")
+
     @property
     def dirty(self):
         """
             Check for manipulable validity
             to disable modal when required
         """
+        o = bpy.data.objects.get(self.object_name)
         return (
             self.manipulable is None or
-            bpy.data.objects.find(self.object_name) < 0
+            o is None or
+            # The object is not selected and snap is not active
+            not (self.is_snapping(bpy.context) or o.select_get())
             )
 
     def exit(self):
@@ -138,17 +143,9 @@ class ArchipackActiveManip:
         for m in self.stack:
             if m is not None:
                 m.exit()
-         
         if self.manipulable is not None:
-            # always retrieve fresh datablock instance
-            # as manipulable might loose proper reference
-            o = bpy.data.objects.get(self.object_name)
-            d = self.datablock(o)
-            if d:
-                d.manipulate_mode = False
-        
-        self.manipulable = None
-        self.datablock = None
+            self.manipulable.manipulate_mode = False
+            self.manipulable = None
         self.object_name = ""
         self.stack.clear()
 
@@ -179,7 +176,6 @@ def check_stack(key):
         # print("check_stack : key.dirty %s" % (key))
         remove_manipulable(key)
         return True
-
     return False
 
 
@@ -198,7 +194,7 @@ def empty_stack():
 def add_manipulable(key, manipulable):
     """
         add a ArchipackActiveManip into the stack
-        if not allready present
+        if not already present
         setup reference to manipulable
         return manipulators stack
     """
@@ -208,8 +204,6 @@ def add_manipulable(key, manipulable):
         manips[key] = ArchipackActiveManip(key)
 
     manips[key].manipulable = manipulable
-    # class method for fast datablock access
-    manips[key].datablock = manipulable.__class__.datablock
     return manips[key].stack
 
 
@@ -255,14 +249,11 @@ class Manipulator():
         # unit for keyboard input value
         self.value_type = 'LENGTH'
         self.pts_mode = 'SIZE'
-
-        # must hold those data here
         self.o = o
         self.datablock = datablock
         self.manipulator = manipulator
-
         self.snap_callback = snap_callback
-        self.origin = self.o.matrix_world.translation.copy()
+        self.origin = Vector((0, 0, 1))
         self.mouse_pos = Vector((0, 0))
         self.length_entered = ""
         self.line_pos = 0
@@ -280,18 +271,15 @@ class Manipulator():
 
     def exit(self):
         """
-            Modal exit, DONT EVEN TRY TO OVERRIDE
+            Modal exit, DON'T EVEN TRY TO OVERRIDE
         """
         if self._handle is not None:
-            logger.debug("draw_handler_remove")
             bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
-            # Prevent race condition with redraw and the above call
             self._handle = None
-            logger.debug("draw_handler_remove done")
         else:
-            logger.debug("Manipulator.exit() handle not found %s", (type(self).__name__))
+            print("Manipulator.exit() handle not found %s" % (type(self).__name__))
 
-    # Mouse event handlers, MUST be overriden
+    # Mouse event handlers, MUST be overridden
     def mouse_press(self, context, event):
         """
             Manipulators must implement
@@ -316,7 +304,7 @@ class Manipulator():
         """
         raise NotImplementedError
 
-    # Keyboard event handlers, MAY be overriden
+    # Keyboard event handlers, MAY be overridden
     def keyboard_done(self, context, event, value):
         """
             Manipulators may implement
@@ -360,8 +348,8 @@ class Manipulator():
         """
         return False
 
-    # Internal, do not override unless you realy
-    # realy realy know what you are doing
+    # Internal, do not override unless you really
+    # really really deeply know what you are doing
     def keyboard_eval(self, context, event):
         """
             evaluate keyboard entry while typing
@@ -410,10 +398,6 @@ class Manipulator():
             Modal handler
             handle mouse, and keyboard events
             enable and disable feedback
-
-            return boolean
-            where True means the event was handled here so stack return RUNNING_MODAL
-            and False means let the event bubble on stack
         """
         # print("Manipulator modal:%s %s" % (event.value, event.type))
 
@@ -477,7 +461,7 @@ class Manipulator():
                         ret = False
                         self.keyboard_cancel(context, event)
                         pass
-                    context.area.header_text_set()
+                    context.area.header_text_set(None)
                     self.keyboard_input_active = False
                     self.feedback.disable()
                     return ret
@@ -501,7 +485,7 @@ class Manipulator():
         view_vector_mouse = view3d_utils.region_2d_to_vector_3d(region, rv3d, self.mouse_pos)
         ray_origin_mouse = view3d_utils.region_2d_to_origin_3d(region, rv3d, self.mouse_pos)
         pt = intersect_line_plane(ray_origin_mouse, ray_origin_mouse + view_vector_mouse,
-            self.origin, rM * self.manipulator.normal, False)
+            self.origin, rM @ self.manipulator.normal, False)
         # fix issue with parallel plane
         if pt is None:
             pt = intersect_line_plane(ray_origin_mouse, ray_origin_mouse + view_vector_mouse,
@@ -527,18 +511,19 @@ class Manipulator():
         """
         try:
             if self.get_value(data, attr, index) != value:
-                # switch context so unselected object are manipulable too
-                old = context.active_object
-                state = self.o.select
-                self.o.select = True
-                context.scene.objects.active = self.o
+                o = self.o
+                # switch context so unselected object may be manipulable too
+                old = context.object
+                state = o.select_get()
+                o.select_set(state=True)
+                context.view_layer.objects.active = o
                 if index > -1:
                     getattr(data, attr)[index] = value
                 else:
                     setattr(data, attr, value)
-                self.o.select = state
-                old.select = True
-                context.scene.objects.active = old
+                o.select_set(state=state)
+                old.select_set(state=True)
+                context.view_layer.objects.active = old
         except:
             pass
 
@@ -548,11 +533,7 @@ class Manipulator():
             tM Matrix source
             vec Vector translation
         """
-        return tM * Matrix([
-        [1, 0, 0, vec.x],
-        [0, 1, 0, vec.y],
-        [0, 0, 1, vec.z],
-        [0, 0, 0, 1]])
+        return tM @ Matrix.Translation(vec)
 
     def _move(self, o, axis, value):
         if axis == 'x':
@@ -570,84 +551,21 @@ class Manipulator():
         """
         old = context.active_object
         bpy.ops.object.select_all(action='DESELECT')
-        self.o.select = True
-        context.scene.objects.active = self.o
+        self.o.select_set(state=True)
+        context.view_layer.objects.active = self.o
         bpy.ops.object.select_linked(type='OBDATA')
         for o in context.selected_objects:
             if o != self.o:
                 self._move(o, axis, value)
         bpy.ops.object.select_all(action='DESELECT')
-        old.select = True
-        context.scene.objects.active = old
+        old.select_set(state=True)
+        context.view_layer.objects.active = old
 
     def move(self, context, axis, value):
         """
             Move an object along local axis
         """
         self._move(self.o, axis, value)
-
-
-# OUT OF ORDER
-class SnapPointManipulator(Manipulator):
-    """
-        np_station based snap manipulator
-        dosent update anything by itself.
-        NOTE : currently out of order
-        and disabled in __init__
-    """
-    def __init__(self, context, o, datablock, manipulator, handle_size, snap_callback=None):
-
-        raise NotImplementedError
-
-        self.handle = SquareHandle(handle_size, 1.2 * arrow_size, draggable=True)
-        Manipulator.__init__(self, context, o, datablock, manipulator, snap_callback)
-
-    def check_hover(self):
-        self.handle.check_hover(self.mouse_pos)
-
-    def mouse_press(self, context, event):
-        if self.handle.hover:
-            self.handle.hover = False
-            self.handle.active = True
-            self.o.select = True
-            # takeloc = self.o.matrix_world * self.manipulator.p0
-            # print("Invoke sp_point_move %s" % (takeloc))
-            # @TODO:
-            # implement and add draw and callbacks
-            # snap_point(takeloc, draw, callback)
-            return True
-        return False
-
-    def mouse_release(self, context, event):
-        self.check_hover()
-        self.handle.active = False
-        # False to callback manipulable_release
-        return False
-
-    def update(self, context, event):
-        # NOTE:
-        # dosent set anything internally
-        return
-
-    def mouse_move(self, context, event):
-        """
-
-        """
-        self.mouse_position(event)
-        if self.handle.active:
-            # self.handle.active = np_snap.is_running
-            # self.update(context)
-            # True here to callback manipulable_manipulate
-            return True
-        else:
-            self.check_hover()
-        return False
-
-    def draw_callback(self, _self, context, render=False):
-        logger.debug("SnapPointManipulator.draw_callback")
-        left, right, side, normal = self.manipulator.get_pts(self.o.matrix_world)
-        self.handle.set_pos(context, left, Vector((1, 0, 0)), normal=normal)
-        self.handle.draw(context, render)
 
 
 # Generic snap tool for line based archipack objects (fence, wall, maybe stair too)
@@ -715,7 +633,7 @@ class WallSnapManipulator(Manipulator):
                 ])
             self.feedback.enable()
             self.handle.hover = False
-            self.o.select = True
+            self.o.select_set(state=True)
             takeloc, right, side, dz = self.manipulator.get_pts(self.o.matrix_world)
             dx = (right - takeloc).normalized()
             dy = dz.cross(dx)
@@ -748,18 +666,17 @@ class WallSnapManipulator(Manipulator):
         logger.debug("WallSnapManipulator.sp_callback")
 
         if state == 'SUCCESS':
-
-            self.o.select = True
+            o = self.o
+            o.select_set(state=True)
+            context.view_layer.objects.active = o
             # apply changes to wall
             d = self.datablock
-            d.auto_update = False
-
             g = d.get_generator()
 
             # rotation relative to object
-            rM = self.o.matrix_world.inverted().to_3x3()
-            delta = (rM * sp.delta).to_2d()
-            # x_axis = (rM * Vector((1, 0, 0))).to_2d()
+            rM = o.matrix_world.inverted().to_3x3()
+            delta =rM @ sp.delta
+            # x_axis = (rM @ Vector((1, 0, 0))).to_2d()
 
             # update generator
             idx = 0
@@ -768,7 +685,7 @@ class WallSnapManipulator(Manipulator):
                 if selected:
 
                     # new location in object space
-                    pt = g.segs[idx].lerp(0) + delta
+                    pt = g.segs[idx].lerp(0) + delta.to_2d()
 
                     # move last point of segment before current
                     if idx > 0:
@@ -781,6 +698,7 @@ class WallSnapManipulator(Manipulator):
 
             # update properties from generator
             idx = 0
+            d.auto_update = False
             for p0, p1, selected in gl_pts3d:
 
                 if selected:
@@ -793,7 +711,7 @@ class WallSnapManipulator(Manipulator):
                         if idx > 1:
                             part.a0 = w.delta_angle(g.segs[idx - 2])
                         else:
-                            part.a0 = w.straight(1, 0).angle
+                            part.a0 = w.a0
 
                         if "C_" in part.type:
                             part.radius = w.r
@@ -807,10 +725,14 @@ class WallSnapManipulator(Manipulator):
                     if idx > 0:
                         part.a0 = w.delta_angle(g.segs[idx - 1])
                     else:
-                        part.a0 = w.straight(1, 0).angle
+                        part.a0 = w.a0
                         # move object when point 0
-                        self.o.location += sp.delta
-                        self.o.matrix_world.translation += sp.delta
+                        if USE_MOVE_OBJECT:
+                            d.move_object(o, o.matrix_world.translation + sp.delta)
+                            # self.o.location += sp.delta
+                            # self.o.matrix_world.translation += sp.delta
+                        else:
+                            d.origin += sp.delta
 
                     if "C_" in part.type:
                         part.radius = w.r
@@ -824,7 +746,10 @@ class WallSnapManipulator(Manipulator):
                 idx += 1
 
             self.mouse_release(context, event)
+            if hasattr(d, "relocate_childs"):
+                d.relocate_childs(context, o, g)
             d.auto_update = True
+            d.update(context)
 
         if state == 'CANCEL':
             self.mouse_release(context, event)
@@ -948,8 +873,6 @@ class CounterManipulator(Manipulator):
         """
             draw on screen feedback using gl.
         """
-        logger.debug("CounterManipulator.draw_callback")
-
         # won't render counter
         if render:
             return
@@ -966,7 +889,6 @@ class CounterManipulator(Manipulator):
         self.label.draw(context, render)
         self.handle_left.draw(context, render)
         self.handle_right.draw(context, render)
-        logger.debug("CounterManipulator.draw_callback done")
 
 
 class DumbStringManipulator(Manipulator):
@@ -995,8 +917,6 @@ class DumbStringManipulator(Manipulator):
         """
             draw on screen feedback using gl.
         """
-        logger.debug("DumbStringManipulator.draw_callback")
-
         # won't render string
         if render:
             return
@@ -1004,7 +924,6 @@ class DumbStringManipulator(Manipulator):
         pos = left + 0.5 * (right - left)
         self.label.set_pos(context, None, pos, pos, normal=normal)
         self.label.draw(context, render)
-        logger.debug("DumbStringManipulator.draw_callback done")
 
 
 class SizeManipulator(Manipulator):
@@ -1045,7 +964,6 @@ class SizeManipulator(Manipulator):
             ])
             gl_pts3d = [left, right]
             snap_point(takemat=takemat,
-                draw=self.sp_draw,
                 callback=self.sp_callback,
                 constraint_axis=(True, False, False))
             self.handle_right.active = True
@@ -1104,8 +1022,6 @@ class SizeManipulator(Manipulator):
         """
             draw on screen feedback using gl.
         """
-        logger.debug("SizeManipulator.draw_callback")
-
         left, right, side, normal = self.manipulator.get_pts(self.o.matrix_world)
         self.origin = left
         self.line_1.p = left
@@ -1129,40 +1045,31 @@ class SizeManipulator(Manipulator):
         self.handle_right.draw(context, render)
         self.label.draw(context, render)
         self.feedback.draw(context, render)
-        logger.debug("SizeManipulator.draw_callback done")
-
-    def sp_draw(self, sp, context):
-        logger.debug("SizeManipulator.sp_draw")
-        global gl_pts3d
-        if self.o is None:
-            return
-        p0 = gl_pts3d[0].copy()
-        p1 = gl_pts3d[1].copy()
-        p1 += sp.delta
-        self.sp_update(context, p0, p1)
-        logger.debug("SizeManipulator.sp_draw done")
-
-        return
 
     def sp_callback(self, context, event, state, sp):
         logger.debug("SizeManipulator.sp_callback")
+        global gl_pts3d
 
-        if state == 'SUCCESS':
-            self.sp_draw(sp, context)
-            self.mouse_release(context, event)
+        p0 = gl_pts3d[0].copy()
+        p1 = gl_pts3d[1].copy()
 
-        if state == 'CANCEL':
-            p0 = gl_pts3d[0].copy()
-            p1 = gl_pts3d[1].copy()
-            self.sp_update(context, p0, p1)
-            self.mouse_release(context, event)
-        logger.debug("SizeManipulator.sp_callback done")
+        if state != 'CANCEL':
+            p1 += sp.delta
 
-    def sp_update(self, context, p0, p1):
-        logger.debug("SizeManipulator.sp_update")
         length = (p0 - p1).length
+
+        if state != 'CANCEL' and event.alt:
+            if event.shift:
+                length = round(length, 2)
+            else:
+                length = round(length, 1)
+
         self.set_value(context, self.datablock, self.manipulator.prop1_name, length)
-        logger.debug("SizeManipulator.sp_update done")
+
+        if state != 'RUNNING':
+            self.mouse_release(context, event)
+
+        logger.debug("SizeManipulator.sp_callback done")
 
 
 class SizeLocationManipulator(SizeManipulator):
@@ -1174,7 +1081,7 @@ class SizeLocationManipulator(SizeManipulator):
 
         Also take care of moving linked objects too
         Changing size is not necessary as link does
-        allredy handle this and childs panels are
+        already handle this and childs panels are
         updated by base object.
     """
     def __init__(self, context, o, datablock, manipulator, handle_size, snap_callback=None):
@@ -1243,7 +1150,7 @@ class SizeLocationManipulator(SizeManipulator):
             self.mouse_release(context, event)
             # must move back to original location
             itM = self.o.matrix_world.inverted()
-            dl = self.get_value(itM * self.original_location, self.manipulator.prop2_name)
+            dl = self.get_value(itM @ self.original_location, self.manipulator.prop2_name)
 
             self.move(context, self.manipulator.prop2_name, dl)
             self.set_value(context, self.datablock, self.manipulator.prop1_name, self.original_size)
@@ -1286,7 +1193,7 @@ class SnapSizeLocationManipulator(SizeLocationManipulator):
 
         Also take care of moving linked objects too
         Changing size is not necessary as link does
-        allredy handle this and childs panels are
+        already handle this and childs panels are
         updated by base object.
 
 
@@ -1316,7 +1223,6 @@ class SnapSizeLocationManipulator(SizeLocationManipulator):
             ])
             gl_pts3d = [left, right]
             snap_point(takemat=takemat,
-            draw=self.sp_draw,
             callback=self.sp_callback,
             constraint_axis=(True, False, False))
 
@@ -1343,7 +1249,6 @@ class SnapSizeLocationManipulator(SizeLocationManipulator):
             ])
             gl_pts3d = [left, right]
             snap_point(takemat=takemat,
-            draw=self.sp_draw,
             callback=self.sp_callback,
             constraint_axis=(True, False, False))
             self.handle_left.active = True
@@ -1358,55 +1263,49 @@ class SnapSizeLocationManipulator(SizeLocationManipulator):
 
         return False
 
-    def sp_draw(self, sp, context):
-        logger.debug("SnapSizeLocationManipulator.sp_draw")
+    def sp_callback(self, context, event, state, sp):
+        logger.debug("SnapSizeLocationManipulator.sp_callback")
         global gl_pts3d
-        if self.o is None:
-            return
         p0 = gl_pts3d[0].copy()
         p1 = gl_pts3d[1].copy()
-        if self.handle_right.active:
-            p1 += sp.delta
-        else:
-            p0 += sp.delta
-        self.sp_update(context, p0, p1)
+
+        if state != 'CANCEL':
+            if self.handle_right.active:
+                p1 += sp.delta
+            else:
+                p0 += sp.delta
+
+        l0 = self.get_value(self.datablock, self.manipulator.prop1_name)
+        length = (p0 - p1).length
+
+        if state != 'CANCEL' and event.alt:
+            if event.shift:
+                length = round(length, 2)
+            else:
+                length = round(length, 1)
+
+        dp = length - l0
+
+        if self.handle_left.active:
+            dp = -dp
+        dl = 0.5 * dp
+
+        # snap_helper = context.object
+        self.move(context, self.manipulator.prop2_name, dl)
+        self.set_value(context, self.datablock, self.manipulator.prop1_name, length)
+        self.move_linked(context, self.manipulator.prop2_name, dl)
 
         # snapping child objects may require base object update
         # eg manipulating windows requiring wall update
         if self.snap_callback is not None:
             snap_helper = context.active_object
             self.snap_callback(context, o=self.o, manipulator=self)
-            context.scene.objects.active = snap_helper
-        logger.debug("SnapSizeLocationManipulator.sp_draw done")
+            snap_helper.select_set(state=True)
 
-        return
-
-    def sp_callback(self, context, event, state, sp):
-        logger.debug("SnapSizeLocationManipulator.sp_callback")
-
-        if state == 'SUCCESS':
-            self.sp_draw(sp, context)
+        if state != 'RUNNING':
             self.mouse_release(context, event)
 
-        if state == 'CANCEL':
-            p0 = gl_pts3d[0].copy()
-            p1 = gl_pts3d[1].copy()
-            self.sp_update(context, p0, p1)
-            self.mouse_release(context, event)
         logger.debug("SnapSizeLocationManipulator.sp_callback done")
-
-    def sp_update(self, context, p0, p1):
-        logger.debug("SnapSizeLocationManipulator.sp_update")
-        l0 = self.get_value(self.datablock, self.manipulator.prop1_name)
-        length = (p0 - p1).length
-        dp = length - l0
-        if self.handle_left.active:
-            dp = -dp
-        dl = 0.5 * dp
-        self.move(context, self.manipulator.prop2_name, dl)
-        self.set_value(context, self.datablock, self.manipulator.prop1_name, length)
-        self.move_linked(context, self.manipulator.prop2_name, dl)
-        logger.debug("SnapSizeLocationManipulator.sp_update done")
 
 
 class DeltaLocationManipulator(SizeManipulator):
@@ -1447,7 +1346,6 @@ class DeltaLocationManipulator(SizeManipulator):
             ])
             gl_pts3d = [p0]
             snap_point(takemat=takemat,
-                draw=self.sp_draw,
                 callback=self.sp_callback,
                 constraint_axis=(
                     self.manipulator.prop1_name == 'x',
@@ -1472,37 +1370,29 @@ class DeltaLocationManipulator(SizeManipulator):
             self.check_hover()
         return False
 
-    def sp_draw(self, sp, context):
-        logger.debug("DeltaLocationManipulator.sp_draw")
-
-        global gl_pts3d
-        if self.o is None:
-            return
-        p0 = gl_pts3d[0].copy()
-        p1 = p0 + sp.delta
-        itM = self.o.matrix_world.inverted()
-        dl = self.get_value(itM * p1, self.manipulator.prop1_name)
-        self.move(context, self.manipulator.prop1_name, dl)
-
-        # snapping child objects may require base object update
-        # eg manipulating windows requiring wall update
-        if self.snap_callback is not None:
-            snap_helper = context.active_object
-            self.snap_callback(context, o=self.o, manipulator=self)
-            context.scene.objects.active = snap_helper
-        logger.debug("DeltaLocationManipulator.sp_draw done")
-
-        return
-
     def sp_callback(self, context, event, state, sp):
         logger.debug("DeltaLocationManipulator.sp_callback")
 
-        if state == 'SUCCESS':
-            self.sp_draw(sp, context)
-            self.mouse_release(context, event)
-
         if state == 'CANCEL':
             self.cancel(context, event)
+        else:
+            global gl_pts3d
+            p0 = gl_pts3d[0].copy()
+            p1 = p0 + sp.delta
+            itM = self.o.matrix_world.inverted()
+            dl = self.get_value(itM @ p1, self.manipulator.prop1_name)
+            self.move(context, self.manipulator.prop1_name, dl)
+
+            # snapping child objects may require base object update
+            # eg manipulating windows requiring wall update
+            if self.snap_callback is not None:
+                snap_helper = context.active_object
+                self.snap_callback(context, o=self.o, manipulator=self)
+                snap_helper.select_set(state=True)
+
+            if state == 'SUCCESS':
+                self.mouse_release(context, event)
+
         logger.debug("DeltaLocationManipulator.sp_callback done")
 
     def cancel(self, context, event):
@@ -1510,11 +1400,10 @@ class DeltaLocationManipulator(SizeManipulator):
             self.mouse_release(context, event)
             # must move back to original location
             itM = self.o.matrix_world.inverted()
-            dl = self.get_value(itM * self.original_location, self.manipulator.prop1_name)
+            dl = self.get_value(itM @ self.original_location, self.manipulator.prop1_name)
             self.move(context, self.manipulator.prop1_name, dl)
 
     def draw_callback(self, _self, context, render=False):
-        logger.debug("DeltaLocationManipulator.draw_callback")
         """
             draw on screen feedback using gl.
         """
@@ -1528,7 +1417,6 @@ class DeltaLocationManipulator(SizeManipulator):
         self.handle_left.draw(context, render)
         self.handle_right.draw(context, render)
         self.feedback.draw(context)
-        logger.debug("DeltaLocationManipulator.draw_callback done")
 
 
 class DumbSizeManipulator(SizeManipulator):
@@ -2005,208 +1893,18 @@ class ArcAngleRadiusManipulator(ArcAngleManipulator):
             self.set_value(context, self.datablock, self.manipulator.prop2_name, self.original_radius)
 
 
-class SnapVectorManipulator(Manipulator):
-    """
-        Move a child window or door in wall segment
-        not limited to this by the way
-    """
-    def __init__(self, context, o, datablock, manipulator, handle_size, snap_callback=None):
-        self.handle = SquareHandle(handle_size, 1.2 * arrow_size, draggable=True, selectable=True)
-        Manipulator.__init__(self, context, o, datablock, manipulator, snap_callback)
-        self.feedback.instructions(context, "Move", "Drag to move", [
-            ('CTRL', 'Snap'),
-            ('SHIFT', 'Round value'),
-            ('RIGHTCLICK or ESC', 'cancel')
-            ])
-        self.selectable = True
-
-    def select(self, cursor_area):
-        self.selected = self.selected or cursor_area.in_area(self.handle.pos_2d)
-        self.handle.selected = self.selected
-
-    def deselect(self, cursor_area):
-        self.selected = not cursor_area.in_area(self.handle.pos_2d)
-        self.handle.selected = self.selected
-
-    def check_hover(self):
-        self.handle.check_hover(self.mouse_pos)
-
-    def mouse_press(self, context, event):
-        global gl_pts3d
-        global manips
-        if self.handle.hover:
-            self.active = True
-            self.handle.active = True
-            self.original_location = self.get_value(self.datablock, self.manipulator.prop1_name).copy()
-            self.feedback.enable()
-
-            left, right, side, dz = self.manipulator.get_pts(self.o.matrix_world)
-            dp = (right - left)
-            dx = dp.normalized()
-            dy = dz.cross(dx)
-            p0 = left
-            takemat = Matrix([
-                [dx.x, dy.x, dz.x, p0.x],
-                [dx.y, dy.y, dz.y, p0.y],
-                [dx.z, dy.z, dz.z, p0.z],
-                [0, 0, 0, 1]
-            ])
-            gl_pts3d = [p0]
-            snap_point(takemat=takemat,
-                draw=self.sp_draw,
-                callback=self.sp_callback,
-                constraint_axis=(
-                    self.manipulator.prop1_name == 'x',
-                    self.manipulator.prop1_name == 'y',
-                    self.manipulator.prop1_name == 'z'))
-            return True
-        return False
-
-    def mouse_release(self, context, event):
-        self.check_hover()
-        self.feedback.disable()
-        self.active = False
-        self.handle.active = False
-        return False
-
-    def mouse_move(self, context, event):
-        self.mouse_position(event)
-        if self.handle.active:
-            # False here to pass_through
-            # print("i'm able to pick up mouse move event while transform running")
-            return False
-        else:
-            self.check_hover()
-        return False
-
-    def sp_draw(self, sp, context):
-        logger.debug("DeltaLocationManipulator.sp_draw")
-
-        global gl_pts3d
-        if self.o is None:
-            return
-        p0 = gl_pts3d[0].copy()
-        p1 = p0 + sp.delta
-        itM = self.o.matrix_world.inverted()
-        self.set_value(context, self.datablock, self.manipulator.prop1_name, itM * p1)
-        return
-
-    def sp_callback(self, context, event, state, sp):
-        logger.debug("DeltaLocationManipulator.sp_callback")
-
-        if state == 'SUCCESS':
-            self.sp_draw(sp, context)
-            self.mouse_release(context, event)
-
-        if state == 'CANCEL':
-            self.cancel(context, event)
-        logger.debug("DeltaLocationManipulator.sp_callback done")
-
-    def cancel(self, context, event):
-        if self.active:
-            self.mouse_release(context, event)
-            # must move back to original location
-            self.set_value(context, self.datablock, self.manipulator.prop1_name, self.original_location)
-
-    def draw_callback(self, _self, context, render=False):
-        left, right, side, normal = self.manipulator.get_pts(self.o.matrix_world)
-        self.handle.set_pos(context, left, (left - right).normalized(), normal=normal)
-        self.handle.draw(context, render)
-        self.feedback.draw(context, render)
-
-
-class CallOperatorManipulator(Manipulator):
-    """
-        increase or decrease an integer step by step
-        right on click to prevent misuse
-    """
-    def __init__(self, context, o, datablock, manipulator, handle_size, snap_callback=None):
-        self.handle = SquareHandle(handle_size, arrow_size, draggable=True)
-        Manipulator.__init__(self, context, o, datablock, manipulator, snap_callback)
-        
-    def check_hover(self):
-        self.handle.check_hover(self.mouse_pos)
-        
-    def mouse_press(self, context, event):
-        if self.handle.hover:
-            po = self.manipulator.prop1_name.split(".")
-            # couple arg=value,
-            args = self.manipulator.prop2_name.split(",")
-            params = {}
-            for arg in args:
-                res = arg.split("=")
-                if len(res) == 2:
-                    name, val = res
-                    try:
-                        val = int(val)
-                        params[name] = val
-                    except ValueError:
-                        try:
-                            val = float(val)
-                            params[name] = val
-                        except ValueError:
-                            params[name] = val
-                            pass
-                        pass
-            op = getattr(getattr(bpy.ops, po[0]), po[1])
-            if op.poll():
-                op(**params)
-            self.handle.active = True
-            return True
-        return False
-
-    def mouse_release(self, context, event):
-        self.check_hover()
-        self.handle.active = False
-        return False
-
-    def mouse_move(self, context, event):
-        self.mouse_position(event)
-        if self.handle.active:
-            return True
-        else:
-            self.check_hover()
-        return False
-
-    def draw_callback(self, _self, context, render=False):
-        """
-            draw on screen feedback using gl.
-        """
-        logger.debug("CallOperatorManipulator.draw_callback")
-
-        # won't render counter
-        if render:
-            return
-        left, right, side, normal = self.manipulator.get_pts(self.o.matrix_world)
-        self.handle.set_pos(context, left, (left - right).normalized(), normal=normal)
-        self.handle.draw(context, render)
-        logger.debug("CallOperatorManipulator.draw_callback done")
-
-        
-class CallAddOperatorManipulator(CallOperatorManipulator):
-    def __init__(self, context, o, datablock, manipulator, handle_size, snap_callback=None):
-        CallOperatorManipulator.__init__(self, context, o, datablock, manipulator, snap_callback)
-        self.handle = PlusHandle(handle_size, arrow_size, draggable=True)
-
-        
-class CallRemoveOperatorManipulator(CallOperatorManipulator):
-    def __init__(self, context, o, datablock, manipulator, handle_size, snap_callback=None):
-        CallOperatorManipulator.__init__(self, context, o, datablock, manipulator, snap_callback)
-        self.handle = CruxHandle(handle_size, arrow_size, draggable=True)
-        
-        
 # ------------------------------------------------------------------
 # Define a single Manipulator Properties to store on object
 # ------------------------------------------------------------------
 
 
-# Allow registeration of manipulators classes
+# Allow registering manipulators classes
 manipulators_class_lookup = {}
 
 
 def register_manipulator(type_key, manipulator_class):
     if type_key in manipulators_class_lookup.keys():
-        raise RuntimeError("Manipulator of type {} allready exists, unable to override".format(type_key))
+        raise RuntimeError("Manipulator of type {} already exists, unable to override".format(type_key))
     manipulators_class_lookup[type_key] = manipulator_class
 
 
@@ -2219,33 +1917,28 @@ class archipack_manipulator(PropertyGroup):
         p0, p1, p2 3d Vectors as base points to represent manipulators on screen
         normal Vector normal of plane on with draw manipulator
     """
-    type_key = StringProperty(default='SIZE')
+    type_key : StringProperty(default='SIZE')
 
     # How 3d points are stored in manipulators ?
-    # SIZE = 2 absolute positionned and a scaling vector
-    # RADIUS = 1 absolute positionned (center) and 2 relatives (sides)
-    # POLYGON = 2 absolute positionned and a relative vector (for rect polygons)
+    # SIZE = 2 absolute positioned and a scaling vector
+    # RADIUS = 1 absolute positioned (center) and 2 relatives (sides)
+    # POLYGON = 2 absolute positioned and a relative vector (for rect polygons)
 
-    pts_mode = StringProperty(default='SIZE')
-    prop1_name = StringProperty()
-    prop2_name = StringProperty()
-    p0 = FloatVectorProperty(subtype='XYZ')
-    p1 = FloatVectorProperty(subtype='XYZ')
-    p2 = FloatVectorProperty(subtype='XYZ')
+    pts_mode : StringProperty(default='SIZE')
+    prop1_name : StringProperty()
+    prop2_name : StringProperty()
+    p0 : FloatVectorProperty(subtype='XYZ')
+    p1 : FloatVectorProperty(subtype='XYZ')
+    p2 : FloatVectorProperty(subtype='XYZ')
     # allow orientation of manipulators by default on xy plane,
     # but may be used to constrain heights on local object space
-    normal = FloatVectorProperty(subtype='XYZ', default=(0, 0, 1))
+    normal : FloatVectorProperty(subtype='XYZ', default=(0, 0, 1))
 
     def set_pts(self, pts, normal=None):
         """
             set 3d location of gl points (in object space)
             pts: array of 3 vectors 3d
-            normal: optionnal vector 3d default to Z axis
-
-            @TODO:
-            set those pts right in the stack holding a safer reference
-            how to find the right manipulator in the stack ??
-            -> manip idx
+            normal: optional vector 3d default to Z axis
         """
         pts = [Vector(p) for p in pts]
         self.p0, self.p1, self.p2 = pts
@@ -2259,10 +1952,10 @@ class archipack_manipulator(PropertyGroup):
             tM : object's world matrix
         """
         rM = tM.to_3x3()
-        if self.pts_mode in {'SIZE', 'POLYGON'}:
-            return tM * self.p0, tM * self.p1, self.p2, rM * self.normal
+        if self.pts_mode in ['SIZE', 'POLYGON']:
+            return tM @ self.p0, tM @ self.p1, self.p2, rM @ self.normal
         else:
-            return tM * self.p0, rM * self.p1, rM * self.p2, rM * self.normal
+            return tM @ self.p0, rM @ self.p1, rM @ self.p2, rM @ self.normal
 
     def get_prefs(self, context):
         global __name__
@@ -2271,7 +1964,7 @@ class archipack_manipulator(PropertyGroup):
         try:
             # retrieve addon name from imports
             addon_name = __name__.split('.')[0]
-            prefs = context.user_preferences.addons[addon_name].preferences
+            prefs = context.preferences.addons[addon_name].preferences
             arrow_size = prefs.arrow_size
             handle_size = prefs.handle_size
         except:
@@ -2292,7 +1985,7 @@ class archipack_manipulator(PropertyGroup):
         if self.type_key not in manipulators_class_lookup.keys() or \
                 not manipulators_class_lookup[self.type_key].poll(context):
             # RuntimeError is overkill but may be enabled for debug purposes
-            # Silentely ignore allow skipping manipulators if / when deps as not meet
+            # Silently ignore allow skipping manipulators if / when deps as not meet
             # manip stack will simply be filled with None objects
             # raise RuntimeError("Manipulator of type {} not found".format(self.type_key))
             return None
@@ -2301,38 +1994,6 @@ class archipack_manipulator(PropertyGroup):
         # points storage model as described upside
         self.pts_mode = m.pts_mode
         return m
-
-    def as_dimension(self, context, o, dim):
-
-        if dim is None:
-            bpy.ops.archipack.dimension(auto_manipulate=False)
-            dim = context.active_object
-            dim.parent = o
-            dim.matrix_world = o.matrix_world.copy()
-
-        dim.select = True
-        context.scene.objects.active = dim
-
-        v = Vector(self.p1) - Vector(self.p0)
-        d = dim.data.archipack_dimension[0]
-        d.auto_update = False
-        d.size = (v).length
-        x, y, z = self.p2.normalized()
-        side = 1
-        if x != 0:
-            side = x
-        elif y != 0:
-            side = y
-        elif z != 0:
-            side = z
-        d.distance = -side * self.p2.length
-        d.auto_update = True
-        dim.location = self.p0
-        dim.rotation_euler.z = atan2(v.y, v.x)
-        dim.select = False
-        context.scene.objects.active = o
-
-        return dim
 
 
 # ------------------------------------------------------------------
@@ -2343,38 +2004,10 @@ class archipack_manipulator(PropertyGroup):
 class ARCHIPACK_OT_manipulate(Operator):
     bl_idname = "archipack.manipulate"
     bl_label = "Manipulate"
-    bl_description = "Manipulate archipack objects (only work in object mode)"
+    bl_description = "Manipulate"
     bl_options = {'REGISTER', 'UNDO'}
 
-    @classmethod
-    def poll(self, context):
-        if context.mode == 'OBJECT':
-            o = context.active_object
-            if o.data:
-                for key in o.data.keys():
-                    if "archipack_" in key:
-                        return True
-        return False
-
-    def invoke(self, context, event):
-        o = context.active_object
-        res = {'CANCELLED'}
-        if o.data:
-            for key in o.data.keys():
-                if "archipack_" in key:
-                    d = getattr(o.data, key)[0]
-                    d.manipulable_invoke(context)
-                    res = {'FINISHED'}
-        return res
-
-
-class ARCHIPACK_OT_manipulate_modal(Operator):
-    bl_idname = "archipack.manipulate_modal"
-    bl_label = "Manipulate"
-    bl_description = "Manipulate"
-    bl_options = {'REGISTER', 'UNDO', 'INTERNAL'}
-
-    object_name = StringProperty(default="")
+    object_name : StringProperty(default="")
 
     @classmethod
     def poll(self, context):
@@ -2398,12 +2031,7 @@ class ARCHIPACK_OT_manipulate_modal(Operator):
         # and exit when not found
         if context.area is not None:
             context.area.tag_redraw()
-
         key = self.object_name
-
-        # exit when another object is active ??
-        # might not work when manipulating eg a window through a wall
-
         if check_stack(key):
             self.exit_selectmode(context, key)
             remove_manipulable(key)
@@ -2449,38 +2077,39 @@ class Manipulable():
         Beware : prevent crash calling manipulable_disable()
                  before changing manipulated data structure
     """
-    manipulators = CollectionProperty(
+    manipulators : CollectionProperty(
             type=archipack_manipulator,
             # options={'SKIP_SAVE'},
             # options={'HIDDEN'},
             description="store 3d points to draw gl manipulators"
             )
-    manipulable_refresh = BoolProperty(
+
+    # TODO: make simple instance vars
+    manipulable_refresh : BoolProperty(
             default=False,
             options={'SKIP_SAVE'},
             description="Flag enable to rebuild manipulators when data model change"
             )
-    manipulate_mode = BoolProperty(
+    manipulate_mode : BoolProperty(
             default=False,
             options={'SKIP_SAVE'},
             description="Flag manipulation state so we are able to toggle"
             )
-    select_mode = BoolProperty(
+    select_mode : BoolProperty(
             default=False,
             options={'SKIP_SAVE'},
             description="Flag select state so we are able to toggle"
             )
-    manipulable_selectable = BoolProperty(
+    manipulable_selectable : BoolProperty(
             default=False,
             options={'SKIP_SAVE'},
             description="Flag make manipulators selectable"
             )
-    keymap = None
 
-    # selectable manipulators
-    manipulable_area = GlCursorArea()
-    manipulable_start_point = Vector((0, 0))
-    manipulable_end_point = Vector((0, 0))
+    keymap = None
+    manipulable_area = None
+    manipulable_start_point = None
+    manipulable_end_point = None
     manipulable_draw_handler = None
 
     def setup_manipulators(self):
@@ -2497,6 +2126,13 @@ class Manipulable():
         """
             disable gl draw handlers
         """
+
+        if self.keymap is None:
+            self.keymap = Keymaps(context)
+            self.manipulable_area = GlCursorArea()
+            self.manipulable_start_point = Vector((0, 0))
+            self.manipulable_end_point = Vector((0, 0))
+
         o = context.active_object
         if o is not None:
             self.manipulable_exit_selectmode(context)
@@ -2527,10 +2163,7 @@ class Manipulable():
             self.manip_stack.append(m.setup(context, o, self))
 
     def _manipulable_invoke(self, context):
-        # disallow manipulate in other mode than object
-        if context.mode != 'OBJECT':
-            return 
-            
+
         object_name = context.active_object.name
 
         # store a reference to self for operators
@@ -2553,13 +2186,13 @@ class Manipulable():
                                 ctx['region'] = region
                         break
         if ctx is not None:
-            bpy.ops.archipack.manipulate_modal(ctx, 'INVOKE_DEFAULT', object_name=object_name)
+            bpy.ops.archipack.manipulate(ctx, 'INVOKE_DEFAULT', object_name=object_name)
 
     def manipulable_invoke(self, context):
         """
             call this in operator invoke()
             NB:
-            if override dont forget to call:
+            if override don't forget to call:
                 _manipulable_invoke(context)
 
         """
@@ -2584,17 +2217,18 @@ class Manipulable():
     def manipulable_modal(self, context, event):
         """
             call in operator modal()
-            should not be overriden
+            should not be overridden
             as it provide all needed
-            functionnality out of the box
+            functionality out of the box
         """
+
         # setup again when manipulators type change
         if self.manipulable_refresh:
             # print("manipulable_refresh")
             self.manipulable_refresh = False
             self.manipulable_setup(context)
             self.manipulate_mode = True
-            
+
         if context.area is None:
             self.manipulable_disable(context)
             return {'FINISHED'}
@@ -2603,16 +2237,11 @@ class Manipulable():
 
         if self.keymap is None:
             self.keymap = Keymaps(context)
-        
-        if context.mode != 'OBJECT':
-            self.manipulable_disable(context)
-            return {'FINISHED'}
 
         if self.keymap.check(event, self.keymap.undo):
             # user feedback on undo by disabling manipulators
             self.manipulable_disable(context)
-            # pass through so system is able to undo
-            return {'FINISHED', 'PASS_THROUGH'}
+            return {'FINISHED'}
 
         # clean up manipulator on delete
         if self.keymap.check(event, self.keymap.delete):  # {'X'}:
@@ -2645,15 +2274,9 @@ class Manipulable():
             # so proper release handler is called
             # and return true to call manipulate when required
             # print("manipulator:%s" % manipulator)
-            # TODO:
-            # let modal return {'RUNNING_MODAL', 'PASS_THROUGH', 'FINISHED'}
-
-            # @NOTE: should also return None
-
-            if manipulator is not None:
-                if manipulator.modal(context, event):
-                    self.manipulable_manipulate(context, event, manipulator)
-                    return {'RUNNING_MODAL'}
+            if manipulator is not None and manipulator.modal(context, event):
+                self.manipulable_manipulate(context, event, manipulator)
+                return {'RUNNING_MODAL'}
 
         # print("Manipulable %s %s" % (event.type, event.value))
 
@@ -2722,9 +2345,7 @@ class Manipulable():
         if event.type in {'RIGHTMOUSE', 'ESC'} and event.value == 'PRESS' and not event.alt:
             self.manipulable_disable(context)
             self.manipulable_exit(context)
-
-            # Pass through so other active manipulables also exit
-            return {'FINISHED', 'PASS_THROUGH'}
+            return {'FINISHED'}
 
         return {'PASS_THROUGH'}
 
@@ -2775,13 +2396,6 @@ def register():
     # register_manipulator('SNAP_POINT', SnapPointManipulator)
     # wall's line based object snap
     register_manipulator('WALL_SNAP', WallSnapManipulator)
-    # Dimension manipulator (vector in object space)
-    register_manipulator('SNAP_VEC', SnapVectorManipulator)
-    # Add / remove operator
-    register_manipulator('OP_ADD', CallAddOperatorManipulator)
-    register_manipulator('OP_REM', CallRemoveOperatorManipulator)
-    
-    bpy.utils.register_class(ARCHIPACK_OT_manipulate_modal)
     bpy.utils.register_class(ARCHIPACK_OT_manipulate)
     bpy.utils.register_class(ARCHIPACK_OT_disable_manipulate)
     bpy.utils.register_class(archipack_manipulator)
@@ -2795,7 +2409,6 @@ def unregister():
     del manips
     manipulators_class_lookup.clear()
     del manipulators_class_lookup
-    bpy.utils.unregister_class(ARCHIPACK_OT_manipulate_modal)
     bpy.utils.unregister_class(ARCHIPACK_OT_manipulate)
     bpy.utils.unregister_class(ARCHIPACK_OT_disable_manipulate)
     bpy.utils.unregister_class(archipack_manipulator)

@@ -136,12 +136,10 @@ class Panel():
             number of verts and faces sections along path
         """
         n_path_verts = 2
-        if path_type == 'RECTANGLE':
+        if path_type in ['QUADRI', 'RECTANGLE']:
             n_path_verts = 4 + self.subdiv_x + 2 * self.subdiv_y
             if self.closed_path:
                 n_path_verts += self.subdiv_x
-        elif path_type == 'QUADRI':
-            n_path_verts = 4
         elif path_type in ['ROUND', 'ELLIPSIS']:
             n_path_verts = steps + 3
         elif path_type == 'CIRCLE':
@@ -481,7 +479,7 @@ class Panel():
 
     def choose_a_shape_in_tri(self, center, origin, size, basis, pivot):
         """
-            Choose wich shape inside either a tri or a pentagon
+            Choose which shape inside either a tri or a pentagon
         """
         cx = (0.5 * basis + center.x) - origin.x
         cy = center.y - origin.y
@@ -502,56 +500,6 @@ class Panel():
             # horizontal trapezoid if size.y < center.y
             return 'PENTAGON'
 
-    def avaliable_vertical_space(self, steps, offset, center, origin, size, radius,
-            angle_y, pivot, shape_z=None, path_type='ROUND', axis='XZ'):
-        """
-         Compute avaliable vertical space on both side of the panel
-         for hinges
-        """
-        x = 0
-
-        if path_type == 'ROUND':
-            radius = Vector((radius.x - x, 0))
-            x_left = size.x / 2 * (pivot - 1) + x
-            x_right = size.x / 2 * (pivot + 1) - x
-            y0, y1, a0, da = self._intersect_arc(center, radius, origin.x + x_left, origin.x + x_right)
-            left = y0 - origin.y - x
-            right = y1 - origin.y - x
-
-        elif path_type == 'ELLIPSIS':
-            radius = Vector((radius.x - x, radius.y - x))
-            x_left = size.x / 2 * (pivot - 1) + x
-            x_right = size.x / 2 * (pivot + 1) - x
-            y0, y1, a0, da = self._intersect_arc_elliptic(center, radius, origin.x + x_left, origin.x + x_right)
-            left = y0 - origin.y - x
-            right = y1 - origin.y - x
-
-        elif path_type == 'QUADRI':
-            x_left = size.x / 2 * (pivot - 1) + x
-            x_right = size.x / 2 * (pivot + 1) - x
-            sx = x * sqrt(radius.x * radius.x + center.y * center.y) / radius.x
-            dy = size.y - sx
-            y0 = self._intersect_line(center, radius.x, origin.x + x_left)
-            y1 = self._intersect_line(center, radius.x, origin.x + x_right)
-            # bottom left
-            left = dy - y0 - x
-            right = dy - y1 - x
-
-        elif path_type == 'HORIZONTAL':
-            left, right = size, size
-        elif path_type == 'VERTICAL':
-            left, right = size, size
-        elif path_type == 'CIRCLE':
-            left = 2 * radius.x
-            right = left
-        else:
-            y0 = offset.y + x
-            y1 = offset.y + size.y - x
-            dy = y1 - y0
-            left, right = dy, dy
-
-        return left, right
-
     ############################
     # Vertices
     ############################
@@ -570,7 +518,7 @@ class Panel():
                 size, Vector((radius.x - x, radius.y - x)), x, pivot, shape_z[i]) for i, x in enumerate(self.x)]
         elif path_type == 'QUADRI':
             coords = [self._get_vertical_rectangular_trapezoid_coords(offset, center, origin,
-                size, radius.x, x, pivot, shape_z[i]) for i, x in enumerate(self.x)]
+                size, radius.x, x, pivot) for i, x in enumerate(self.x)]
         elif path_type == 'HORIZONTAL':
             coords = [self._get_horizontal_coords(offset, size, x, pivot)
                 for i, x in enumerate(self.x)]
@@ -683,7 +631,6 @@ class Panel():
             uv_r = 2 * pi * radius.x / steps
             uv_v = [uv_r for i in range(steps + 1)]
         elif path_type == 'QUADRI':
-            # dosent support subdiv
             dy = 0.5 * tan(angle_y) * size.x
             uv_v = [size.y - dy, size.x, size.y + dy, size.x]
         elif path_type == 'HORIZONTAL':
@@ -766,78 +713,3 @@ class Panel():
             idmat.append(self.idmat[0])
             idmat.append(self.idmat[0])
         return idmat
-
-        
-    ############################
-    # Profile as curve
-    ############################
-    def as_2d(self, steps, offset, center, origin, size, radius,
-            angle_y, pivot, shape_z=None, path_type='RECTANGLE', axis='XZ', connect=3):
-        """
-         When closed last coord = first coord
-         connect : 0 dont, 1 connect front, 2 connect back, 3 connect both
-        """
-        # index: array associate each y with a coord circle and a x
-        # x = array of x of unique points in the profil relative to origin (0, 0) is bottom left
-        # y = array of y of all points in the profil relative to origin (0, 0) is bottom left
-
-        coords = []
-        y = offset.y
-        sx = size.x
-        x0 = offset.x + sx / 2 * (pivot - 1)
-        x1 = offset.x + sx / 2 * (pivot + 1)
-        # single closed profile
-        if abs(self.side_cap_front - self.side_cap_back) == len(self.index) - 1:
-            coords.append([
-                    (x0 + self.x[idx], y + self.y[idy], 0)
-                    for idy, idx in enumerate(self.index)
-                ] + list(reversed([
-                    (x1 - self.x[idx], y + self.y[idy], 0)
-                    for idy, idx in enumerate(self.index)
-                ]))
-                ) 
-            coords[-1].append(coords[-1][0])                      
-        else:
-            # 2 profils on both sides
-            coords.append([
-                (x0 + self.x[idx], y + self.y[idy], 0)
-                for idy, idx in enumerate(self.index)
-                ])
-            coords[-1].append(coords[-1][0])
-            coords.append(list(reversed([
-                (x1 - self.x[idx], y + self.y[idy], 0)
-                for idy, idx in enumerate(self.index)
-                ])))
-            coords[-1].append(coords[-1][0])
-            
-            # draw front and back caps if any as closed shape
-            if self.side_cap_front > -1 and self.side_cap_back > -1:
-                idf = self.side_cap_front
-                idb = self.side_cap_back
-                xf = self.x[self.index[idf]]
-                yf = y + self.y[idf]
-                xb = self.x[self.index[idb]]
-                yb = y + self.y[idb]
-                coords.append([
-                    (x0 + xf, yf, 0), (x1 - xf, yf, 0), 
-                    (x1 - xb, yb, 0), (x0 + xb, yb, 0),
-                    (x0 + xf, yf, 0)])
-                
-            if connect > 0:
-                # connect profiles (projection of outermost top / bottom parts)
-                y_max = max(self.y)
-                y_min = min(self.y)
-                if connect % 2 == 1:
-                    x = -1e32
-                    for idy, idx in enumerate(self.index):
-                        if self.y[idy] == y_max and self.x[idx] > x:
-                            x = self.x[idx]
-                    coords.append([(x0 + x, y + y_max, 0), (x1 - x, y + y_max, 0)])
-                if connect > 1:
-                    x = -1e32
-                    for idy, idx in enumerate(self.index):
-                        if self.y[idy] == y_min and self.x[idx] > x:
-                            x = self.x[idx]
-                    coords.append([(x0 + x, y + y_min, 0), (x1 - x, y + y_min, 0)])
-      
-        return coords

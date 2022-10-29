@@ -1,3 +1,0 @@
-DEFAULT##|##Frame
-DEFAULT##|##Blind
-DEFAULT##|##Rope
