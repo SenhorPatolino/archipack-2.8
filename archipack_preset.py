@@ -296,7 +296,7 @@ class PresetMenu():
         elif os.path.exists(filepath + '.png') and os.path.isfile(filepath + '.png'):
             image = bpy.data.images.load(filepath=filepath + '.png')
             if hasattr(image, "colorspace_settings"):
-                image.colorspace_settings.name = 'Raw'
+                image.colorspace_settings.name == 'Generic Data' or image.colorspace_settings.name == 'Non_Color' or image.colorspace_settings.name == 'role_data'
             self.imageList.append(image)
         if image is None:
             image = self.default_image
